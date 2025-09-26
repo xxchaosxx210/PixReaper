@@ -1,0 +1,14 @@
+{
+    "name": "pixreaper",
+    "version": "1.0.0",
+    "description": "PixReaper - an Electron app for browsing and downloading images.",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron ."
+    },
+    "author": "chaosAD",
+    "license": "MIT",
+    "devDependencies": {
+        "electron": "^32.1.0"
+    }
+}
