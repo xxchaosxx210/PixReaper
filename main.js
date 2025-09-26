@@ -8,7 +8,7 @@ function createWindow() {
         autoHideMenuBar: true // 👈 hides the Electron menu
     });
 
-    win.loadURL('about:blank');
+    win.loadFile("renderer/index.html");
 }
 
 app.whenReady().then(() => {
