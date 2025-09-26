@@ -16,12 +16,24 @@ function navigate() {
     window.logger.log("Navigating to: " + url);
 }
 
-// Go button click
+// 🔹 Go button click
 goBtn.addEventListener("click", navigate);
 
-// Enter key press inside input
+// 🔹 Enter key press inside input
 urlInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
         navigate();
     }
+});
+
+// 🔹 Update address bar when the webview navigates
+browser.addEventListener("did-navigate", (event) => {
+    urlInput.value = event.url;
+    window.logger.log("Browser navigated to: " + event.url);
+});
+
+browser.addEventListener("did-navigate-in-page", (event) => {
+    // Handles hash changes (#) and same-page navigations
+    urlInput.value = event.url;
+    window.logger.log("Browser in-page navigation: " + event.url);
 });
