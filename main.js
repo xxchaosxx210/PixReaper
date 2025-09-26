@@ -3,16 +3,16 @@ const path = require('path');
 
 function createWindow() {
     const win = new BrowserWindow({
-        width: 800,
-        height: 600,
-        autoHideMenuBar: true, // hides the default Electron menu bar
+        width: 1200,
+        height: 800,
+        autoHideMenuBar: true,
         webPreferences: {
-            preload: path.join(__dirname, "preload.js"), // preload script for IPC
-            contextIsolation: true, // keeps main/renderer isolated for security
-            nodeIntegration: false  // don’t expose Node APIs directly in renderer
+            preload: path.join(__dirname, "preload.js"),
+            contextIsolation: true,
+            nodeIntegration: false,
+            webviewTag: true // 👈 enable <webview>
         }
     });
-
     // Load your UI
     win.loadFile("renderer/index.html");
 }

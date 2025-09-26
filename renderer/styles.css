@@ -1,3 +1,4 @@
+/* Reset & Base Layout */
 body {
     font-family: Arial, sans-serif;
     margin: 0;
@@ -7,6 +8,7 @@ body {
     height: 100vh;
 }
 
+/* Header */
 header {
     background: #f5f5f5;
     padding: 0.5rem 1rem;
@@ -19,10 +21,12 @@ h1 {
     font-weight: bold;
 }
 
+/* Toolbar (URL bar + Go button) */
 .toolbar {
     display: flex;
     padding: 0.5rem;
     border-bottom: 1px solid #ccc;
+    background: #fafafa;
 }
 
 .toolbar input {
@@ -41,25 +45,47 @@ h1 {
     cursor: pointer;
 }
 
-#results {
-    flex: 1;
-    padding: 1rem;
-    overflow-y: auto;
+.toolbar button:hover {
+    background: #ddd;
 }
 
+/* Webview (embedded browser) */
+#browser {
+    flex: 1;
+    border: none;
+    background: white;
+}
+
+/* Results area */
+#results {
+    height: 150px;
+    overflow-y: auto;
+    border-top: 1px solid #ccc;
+    padding: 0.5rem;
+    background: #fafafa;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+/* Footer (Scan/Download buttons) */
 footer {
     display: flex;
     justify-content: space-around;
     padding: 0.5rem;
     border-top: 1px solid #ccc;
+    background: #f5f5f5;
 }
 
 footer button {
+    flex: 1;
+    margin: 0 0.25rem;
     padding: 0.5rem 1rem;
     border: 1px solid #ccc;
     border-radius: 4px;
     background: #eee;
     cursor: pointer;
-    flex: 1;
-    margin: 0 0.25rem;
+}
+
+footer button:hover {
+    background: #ddd;
 }

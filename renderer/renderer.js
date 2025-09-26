@@ -1,14 +1,27 @@
-document.getElementById("goBtn").addEventListener("click", () => {
-    const url = document.getElementById("urlInput").value;
-    if (url) {
-        window.logger.log("Go button clicked, URL: " + url);
+const goBtn = document.getElementById("goBtn");
+const urlInput = document.getElementById("urlInput");
+const browser = document.getElementById("browser");
+
+function navigate() {
+    let url = urlInput.value.trim();
+
+    if (!url) return;
+
+    // Auto-add protocol if missing
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        url = "https://" + url;
     }
-});
 
-document.getElementById("scanBtn").addEventListener("click", () => {
-    window.logger.log("Scan Page clicked");
-});
+    browser.src = url;
+    window.logger.log("Navigating to: " + url);
+}
 
-document.getElementById("downloadBtn").addEventListener("click", () => {
-    window.logger.log("Download clicked");
+// Go button click
+goBtn.addEventListener("click", navigate);
+
+// Enter key press inside input
+urlInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+        navigate();
+    }
 });
