@@ -29,53 +29,41 @@ browser.addEventListener("did-navigate-in-page", (event) => {
 });
 
 // Scan Page button
-// Scan Page button
 scanBtn.addEventListener("click", async () => {
     window.logger.log("Scan Page clicked");
 
-    // Extract only supported host links from webview DOM
+    // Run DOM scrape directly in the <webview>
     const viewerLinks = await browser.executeJavaScript(`
     Array.from(document.querySelectorAll("a[href] img"))
       .map(img => img.parentElement.href)
-      .filter(href => href && href.match(/(imagebam|imgbox|pixhost|imagevenue|pimpandhost|postimg|turboimagehost|fastpic|imagetwist|imgview|radikal|imageupper)/i))
+      .filter(Boolean)
   `);
 
-    window.logger.log("Found candidate viewer links: " + viewerLinks.length);
+    window.logger.log("Found raw viewer links: " + viewerLinks.length);
 
+    // Send links to main process for filtering
+    window.electronAPI.scanPage(viewerLinks);
+});
+
+// Receive results from main process
+window.electronAPI.onScanResults((links) => {
     resultsDiv.innerHTML = "";
-    if (viewerLinks.length === 0) {
+
+    if (!links || links.length === 0) {
         resultsDiv.textContent = "No supported viewer links found.";
         return;
     }
 
-    // Build UI with "Resolving…" placeholder rows
     const list = document.createElement("ul");
-    viewerLinks.forEach((link, index) => {
+    links.forEach((link) => {
         const li = document.createElement("li");
-        li.id = `result-${index}`;
-        li.textContent = `${link}  —  Resolving…`;
+        const a = document.createElement("a");
+        a.href = link;
+        a.textContent = link;
+        a.target = "_blank"; // open in external browser
+        li.appendChild(a);
         list.appendChild(li);
     });
+
     resultsDiv.appendChild(list);
-
-    // Send to main process for actual resolving
-    window.electronAPI.scanPage(viewerLinks);
-});
-
-// Receive progressive updates from main process
-window.electronAPI.onScanProgress((payload) => {
-    const { index, url, status, resolved } = payload;
-    const li = document.getElementById(`result-${index}`);
-    if (!li) return;
-
-    if (status === "ok") {
-        const a = document.createElement("a");
-        a.href = resolved;
-        a.textContent = resolved;
-        a.target = "_blank";
-        li.innerHTML = `${url}  —  ✅ `;
-        li.appendChild(a);
-    } else if (status === "failed") {
-        li.innerHTML = `${url}  —  ❌ Failed`;
-    }
 });

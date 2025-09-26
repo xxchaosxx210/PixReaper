@@ -18,15 +18,17 @@
     </div>
 
     <!-- Embedded browser -->
-    <webview id="browser" src="https://example.com" style="flex: 1;"></webview>
+    <webview id="browser" src="https://example.com"></webview>
 
+    <!-- Results panel -->
     <div id="results">
-        <!-- Scraped results will show here -->
+        <p>No results yet. Click Scan Page to extract links.</p>
     </div>
 
     <footer>
         <button id="scanBtn">Scan Page</button>
         <button id="downloadBtn">Download</button>
+        <button id="optionsBtn">Options</button>
     </footer>
 
     <script src="renderer.js"></script>
