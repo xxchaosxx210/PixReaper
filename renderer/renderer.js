@@ -7,10 +7,29 @@ const splitter = document.getElementById("splitter");
 const topPanel = document.getElementById("top-panel");
 const bottomPanel = document.getElementById("bottom-panel");
 
+// --- Supported hosts ---
+const supportedHosts = [
+    "pixhost.to",
+    "imagebam.com",
+    "imagevenue.com",
+    "imgbox.com",
+    "pimpandhost.com",
+    "postimg.cc",
+    "turboimagehost.com",
+    "fastpic.org",
+    "fastpic.ru",
+    "imagetwist.com",
+    "imgview.net",
+    "radikal.ru",
+    "imageupper.com",
+];
+
 // --- Navigation ---
 goBtn.addEventListener("click", () => {
     const url = urlInput.value.trim();
-    if (url) browserView.src = url;
+    if (url) {
+        browserView.src = url; // ✅ use src instead of loadURL
+    }
 });
 
 urlInput.addEventListener("keydown", (e) => {
@@ -22,12 +41,20 @@ urlInput.addEventListener("keydown", (e) => {
 // --- Scan Page ---
 scanBtn.addEventListener("click", async () => {
     const viewerLinks = await browserView.executeJavaScript(`
+    const supported = ${JSON.stringify(supportedHosts)};
     Array.from(document.querySelectorAll("a[href] img"))
       .map(img => img.parentElement.href)
-      .filter(href => href)
+      .filter(href => {
+        try {
+          const host = new URL(href).hostname.replace(/^www\\./, "");
+          return supported.some(s => host.endsWith(s));
+        } catch {
+          return false;
+        }
+      });
   `);
 
-    console.log("[Renderer] Found candidate viewer links:", viewerLinks.length);
+    console.log("[Renderer] Found filtered viewer links:", viewerLinks.length);
     resultsList.innerHTML = ""; // clear old results
 
     viewerLinks.forEach((link) => {
@@ -39,11 +66,10 @@ scanBtn.addEventListener("click", async () => {
 
 // --- Receive scan progress ---
 window.electronAPI.onScanProgress(({ original, resolved, status }) => {
-    // Normalize both sides before matching
     const normalize = (u) => {
         try {
             const url = new URL(u);
-            return url.href.replace(/\/$/, ""); // strip trailing slash
+            return url.href.replace(/\/$/, "");
         } catch {
             return u;
         }
