@@ -1,6 +1,13 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
-const { resolveLink, isSupportedHost } = require("./logic/hostResolver");
+// main.js
+const { resolveLink, isSupportedHost, setDebug, logDebug } = require("./logic/hostResolver");
+
+// enable debugging
+setDebug(true);
+
+// Later you can wire this up to a menu item, keyboard shortcut, or even a toggle button in your UI.
+
 
 function createWindow() {
     const win = new BrowserWindow({

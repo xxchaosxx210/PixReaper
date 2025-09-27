@@ -334,5 +334,5 @@ function isSupportedHost(url) {
     }
 }
 
-module.exports = { resolveLink, isSupportedHost };
+module.exports = { resolveLink, isSupportedHost, setDebug, logDebug };
 
