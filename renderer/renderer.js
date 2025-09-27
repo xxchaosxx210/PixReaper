@@ -10,7 +10,7 @@ const bottomPanel = document.getElementById("bottom-panel");
 // --- Navigation ---
 goBtn.addEventListener("click", () => {
     const url = urlInput.value.trim();
-    if (url) browserView.loadURL(url);
+    if (url) browserView.src = url;
 });
 
 urlInput.addEventListener("keydown", (e) => {
@@ -39,9 +39,18 @@ scanBtn.addEventListener("click", async () => {
 
 // --- Receive scan progress ---
 window.electronAPI.onScanProgress(({ original, resolved, status }) => {
-    const item = document.querySelector(
-        `li[data-link="${original}"]`
-    );
+    // Normalize both sides before matching
+    const normalize = (u) => {
+        try {
+            const url = new URL(u);
+            return url.href.replace(/\/$/, ""); // strip trailing slash
+        } catch {
+            return u;
+        }
+    };
+
+    const item = Array.from(resultsList.children)
+        .find(li => normalize(li.dataset.link) === normalize(original));
 
     if (item) {
         const statusEl = item.querySelector(".result-status");
@@ -56,6 +65,8 @@ window.electronAPI.onScanProgress(({ original, resolved, status }) => {
             statusEl.className = "result-status status-failed";
             linkEl.textContent = "Failed to resolve";
         }
+    } else {
+        console.warn("[Renderer] No match found for:", original);
     }
 });
 
