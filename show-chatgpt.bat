@@ -1,23 +1,27 @@
 @echo off
 setlocal
 
-:: Name of the zip file
-set ZIPNAME=PixReaper-export.zip
+:: Name with timestamp so old exports aren’t overwritten
+for /f "tokens=1-4 delims=/ " %%a in ("%date%") do (
+    set YYYY=%%d
+    set MM=%%b
+    set DD=%%c
+)
+set ZIPNAME=PixReaper-%YYYY%-%MM%-%DD%.zip
 
-:: Exclude folders we don't want
-set EXCLUDES=node_modules .vscode .git
-
-:: Delete old zip if it exists
+:: Remove old zip if exists
 if exist "%ZIPNAME%" del "%ZIPNAME%"
 
 echo Creating zip archive: %ZIPNAME%
-:: Use PowerShell's Compress-Archive (built into Windows 10+)
-powershell -command "Compress-Archive -Path * -DestinationPath '%ZIPNAME%' -Force -CompressionLevel Optimal -Exclude %EXCLUDES%"
+
+:: Build file list excluding node_modules, .git, .vscode
+powershell -command ^
+    "Get-ChildItem -Recurse -File | Where-Object { $_.FullName -notmatch '\\node_modules\\|\\.git\\|\\.vscode\\' } | Compress-Archive -DestinationPath '%ZIPNAME%' -Force"
 
 echo.
 echo Copying project file structure to clipboard...
 
-:: Generate tree, ignore unwanted folders, copy to clipboard
+:: Create tree and filter unwanted folders
 (
     dir /s /b ^
     | findstr /V /I "\\node_modules\\" ^
@@ -27,5 +31,5 @@ echo Copying project file structure to clipboard...
 
 echo Done!
 echo - %ZIPNAME% created in current folder
-echo - File structure copied to clipboard, ready to paste here
+echo - File structure copied to clipboard (Ctrl+V to paste here)
 pause
