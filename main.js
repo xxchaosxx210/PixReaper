@@ -20,16 +20,16 @@ function createWindow() {
 
 // Logging from renderer
 ipcMain.on("renderer-log", (event, message) => {
-    console.log(`[Renderer] ${message}`);
+    logDebug(`[Renderer] ${message}`);
 });
 
 // --- Scan Page with filtering + concurrency (8 workers) ---
 ipcMain.on("scan-page", async (event, viewerLinks) => {
-    console.log(`[Scraper] Received ${viewerLinks.length} raw links`);
+    logDebug(`[Scraper] Received ${viewerLinks.length} raw links`);
 
     // Filter to only supported hosts
     const filteredLinks = viewerLinks.filter(isSupportedHost);
-    console.log(`[Scraper] ${filteredLinks.length} supported links after filtering`);
+    logDebug(`[Scraper] ${filteredLinks.length} supported links after filtering`);
 
     const concurrency = 8;
     let active = 0;
@@ -72,7 +72,7 @@ ipcMain.on("scan-page", async (event, viewerLinks) => {
                         if (index < filteredLinks.length) {
                             next(); // queue next
                         } else if (active === 0) {
-                            console.log("[Scraper] All links processed");
+                            logDebug("[Scraper] All links processed");
                             resolve();
                         }
                     });
