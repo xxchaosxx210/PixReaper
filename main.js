@@ -12,8 +12,8 @@ setDebug(true);
 
 function createWindow() {
     const win = new BrowserWindow({
-        width: 1024,
-        height: 768,
+        width: 800,
+        height: 600,
         autoHideMenuBar: true,
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
