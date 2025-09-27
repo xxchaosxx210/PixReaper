@@ -1,91 +1,148 @@
+/* ========== Layout ========== */
 body {
     margin: 0;
-    padding: 0;
     font-family: Arial, sans-serif;
-    height: 100vh;
     display: flex;
     flex-direction: column;
+    height: 100vh;
 }
 
-#nav-bar {
-    padding: 6px;
-    background: #f0f0f0;
-    border-bottom: 1px solid #ccc;
-}
-
-#urlInput {
-    width: 60%;
-    padding: 5px;
-    margin-right: 5px;
-}
-
-#goBtn,
-#scanBtn {
-    padding: 5px 10px;
-    margin-right: 5px;
-    cursor: pointer;
-}
-
+/* Top panel with navigation + browser */
 #top-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
 }
 
-#browserView {
-    flex: 1;
+#nav-bar {
+    display: flex;
+    padding: 5px;
+    background: #f0f0f0;
+    border-bottom: 1px solid #ccc;
 }
 
+#nav-bar input {
+    flex: 1;
+    padding: 5px;
+    margin-right: 5px;
+}
+
+#nav-bar button {
+    margin-left: 5px;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+#browserView {
+    flex: 1;
+    border: none;
+}
+
+/* Splitter */
 #splitter {
-    height: 6px;
-    background: #ddd;
+    height: 5px;
+    background: #ccc;
     cursor: row-resize;
 }
 
+/* Bottom panel (Results) */
 #bottom-panel {
-    flex: 1;
+    height: 200px;
     overflow-y: auto;
+    border-top: 1px solid #ccc;
     padding: 10px;
     background: #fafafa;
-    border-top: 1px solid #ccc;
 }
 
 #results {
     list-style: none;
-    margin: 0;
     padding: 0;
+    margin: 0;
 }
 
-.result-item {
+#results li {
+    margin: 4px 0;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+#results li.success {
+    background: #e6ffed;
+    color: #22863a;
+}
+
+#results li.failed {
+    background: #ffeef0;
+    color: #d73a49;
+}
+
+/* ========== Modal Styles ========== */
+
+/* Modal backdrop */
+.modal {
+    display: none;
+    /* Hidden by default */
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Modal content box */
+.modal-content {
+    background-color: #fff;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 400px;
+    max-width: 90%;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Modal form elements */
+.modal-content label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+.modal-content input[type="text"],
+.modal-content input[type="range"] {
+    width: 100%;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    padding: 5px;
+    box-sizing: border-box;
+}
+
+/* Row layout for Save Path + Browse */
+.modal-content .row {
     display: flex;
     align-items: center;
-    padding: 4px 0;
-    border-bottom: 1px solid #eee;
+    gap: 5px;
 }
 
-.result-status {
-    width: 24px;
-    text-align: center;
-    font-size: 1.2em;
+.modal-content .row input[type="text"] {
+    flex: 1;
 }
 
-.result-link a {
-    color: #0078d7;
-    text-decoration: none;
+.modal-content .row button {
+    white-space: nowrap;
 }
 
-.result-link a:hover {
-    text-decoration: underline;
+/* Modal buttons */
+.modal-buttons {
+    text-align: right;
+    margin-top: 15px;
 }
 
-.status-pending {
-    color: gray;
-}
-
-.status-success {
-    color: green;
-}
-
-.status-failed {
-    color: orange;
+.modal-buttons button {
+    margin-left: 10px;
+    padding: 5px 12px;
+    cursor: pointer;
 }

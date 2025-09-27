@@ -13,9 +13,11 @@
             <input type="text" id="urlInput" placeholder="Enter URL..." />
             <button id="goBtn">Go</button>
             <button id="scanBtn">Scan Page</button>
+            <button id="optionsBtn">⚙️ Options</button>
         </div>
-        <webview id="browserView" src="http://vintage-erotica-forum.com/t19913-p3-jodie-oram-uk.html" allowpopups
-            style="width: 100%; height: 100%;"></webview>
+
+        <webview id="browserView" src="http://vintage-erotica-forum.com/t19913-p3-jodie-oram-uk.html" allowpopups>
+        </webview>
     </div>
 
     <div id="splitter"></div>
@@ -25,7 +27,42 @@
         <ul id="results"></ul>
     </div>
 
-    <script src="renderer.js"></script>
+    <!-- ⚙️ Options Modal -->
+    <div id="optionsModal" class="modal">
+        <div class="modal-content">
+            <h2>⚙️ PixReaper Options</h2>
+
+            <label>Save Path:</label>
+            <div class="row">
+                <input type="text" id="savePath" placeholder="C:\\Users\\chaos\\Downloads\\Pix" />
+                <button id="browseBtn">Browse…</button>
+            </div>
+
+            <label>Filename Prefix:</label>
+            <input type="text" id="prefix" placeholder="PixReaper_" />
+
+            <label>Indexing:</label>
+            <div>
+                <label><input type="radio" name="indexing" value="order" checked /> Keep order</label>
+                <label><input type="radio" name="indexing" value="none" /> None</label>
+            </div>
+
+            <label><input type="checkbox" id="subfolder" /> Create subfolder per download (use URL slug)</label>
+
+            <label for="maxConnections">Max connections:</label>
+            <input type="range" id="maxConnections" min="1" max="50" value="10" />
+            <span id="maxConnectionsValue">10</span>
+
+            <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
+
+            <div class="modal-buttons">
+                <button id="cancelOptions">Cancel</button>
+                <button id="saveOptions">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ❌ Removed: <script src="renderer.js"></script> -->
 </body>
 
 </html>

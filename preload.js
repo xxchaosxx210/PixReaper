@@ -1,11 +1,16 @@
+// preload.js
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("logger", {
-    log: (msg) => ipcRenderer.send("renderer-log", msg),
+// Expose IPC safely to renderer
+contextBridge.exposeInMainWorld("electronAPI", {
+    send: (channel, data) => ipcRenderer.send(channel, data),
+    receive: (channel, func) =>
+        ipcRenderer.on(channel, (event, ...args) => func(...args))
 });
 
-contextBridge.exposeInMainWorld("electronAPI", {
-    scanPage: (links) => ipcRenderer.send("scan-page", links),
-    onScanProgress: (callback) =>
-        ipcRenderer.on("scan-progress", (event, data) => callback(data)),
+// Load renderer.js into the isolated world
+window.addEventListener("DOMContentLoaded", () => {
+    const script = document.createElement("script");
+    script.src = "renderer.js"; // loads from the same folder as index.html
+    document.body.appendChild(script);
 });

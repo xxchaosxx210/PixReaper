@@ -1,38 +1,28 @@
+// renderer/renderer.js
+
+// ======================================================
+// 🌐 Webview Navigation
+// ======================================================
+const webview = document.getElementById("browserView");
 const urlInput = document.getElementById("urlInput");
 const goBtn = document.getElementById("goBtn");
 const scanBtn = document.getElementById("scanBtn");
-const browserView = document.getElementById("browserView");
 const resultsList = document.getElementById("results");
-const splitter = document.getElementById("splitter");
-const topPanel = document.getElementById("top-panel");
-const bottomPanel = document.getElementById("bottom-panel");
 
-// --- Supported hosts ---
-const supportedHosts = [
-    "pixhost.to",
-    "imagebam.com",
-    "imagevenue.com",
-    "imgbox.com",
-    "pimpandhost.com",
-    "postimg.cc",
-    "turboimagehost.com",
-    "fastpic.org",
-    "fastpic.ru",
-    "imagetwist.com",
-    "imgview.net",
-    "radikal.ru",
-    "imageupper.com",
-];
-
-// --- Navigation ---
+// Navigate to typed URL
 goBtn.addEventListener("click", () => {
     const url = urlInput.value.trim();
     if (url) {
-        browserView.src = url; // ✅ use src instead of loadURL
+        if (!/^https?:\/\//i.test(url)) {
+            webview.src = "http://" + url;
+        } else {
+            webview.src = url;
+        }
     }
 });
 
-urlInput.addEventListener("keydown", (e) => {
+// Allow pressing Enter in the address bar
+urlInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter") {
         goBtn.click();
     }
@@ -40,103 +30,104 @@ urlInput.addEventListener("keydown", (e) => {
 
 // --- Scan Page ---
 scanBtn.addEventListener("click", async () => {
-    const viewerLinks = await browserView.executeJavaScript(`
-    const supported = ${JSON.stringify(supportedHosts)};
-    Array.from(document.querySelectorAll("a[href] img"))
-      .map(img => img.parentElement.href)
-      .filter(href => {
-        try {
-          const host = new URL(href).hostname.replace(/^www\\./, "");
-          return supported.some(s => host.endsWith(s));
-        } catch {
-          return false;
-        }
-      });
-  `);
+    console.log("[Renderer] Scan Page clicked");
 
-    console.log("[Renderer] Found filtered viewer links:", viewerLinks.length);
-    resultsList.innerHTML = ""; // clear old results
+    const viewerLinks = await webview.executeJavaScript(`
+        Array.from(document.querySelectorAll("a[href] img"))
+            .map(img => img.parentElement.href)
+            .filter(href => href && href.match(/(imagebam|imgbox|pixhost|imagevenue|pimpandhost|postimg|turboimagehost|fastpic|imagetwist|imgview|radikal|imageupper)/i))
+    `);
 
-    viewerLinks.forEach((link) => {
-        addResultItem(link, "pending");
-    });
+    console.log("[Renderer] Found candidate viewer links:", viewerLinks.length);
 
-    window.electronAPI.scanPage(viewerLinks);
+    // Clear old results
+    resultsList.innerHTML = "";
+
+    // Send links to main process for resolving
+    window.electronAPI.send("scan-page", viewerLinks);
 });
 
-// --- Receive scan progress ---
-window.electronAPI.onScanProgress(({ original, resolved, status }) => {
-    const normalize = (u) => {
-        try {
-            const url = new URL(u);
-            return url.href.replace(/\/$/, "");
-        } catch {
-            return u;
-        }
+// --- Listen for resolved results from main process ---
+window.electronAPI.receive("scan-progress", (data) => {
+    const li = document.createElement("li");
+
+    if (data.status === "success" && data.resolved) {
+        li.innerHTML = `
+            ✅ <a href="${data.resolved}" target="_blank">${data.resolved}</a>
+        `;
+        li.className = "success";
+    } else if (data.status === "failed") {
+        li.innerHTML = `
+            ⚠️ Failed to resolve 
+            <a href="${data.original}" target="_blank">${data.original}</a>
+        `;
+        li.className = "failed";
+    } else {
+        li.innerHTML = `⏳ ${data.original}`;
+        li.className = "pending";
+    }
+
+    resultsList.appendChild(li);
+});
+
+// ======================================================
+// ⚙️ Options Modal Logic
+// ======================================================
+
+const optionsBtn = document.getElementById("optionsBtn");
+const optionsModal = document.getElementById("optionsModal");
+const cancelOptions = document.getElementById("cancelOptions");
+const saveOptions = document.getElementById("saveOptions");
+
+// Inputs inside modal
+const savePathInput = document.getElementById("savePath");
+const prefixInput = document.getElementById("prefix");
+const indexingRadios = document.getElementsByName("indexing");
+const subfolderCheckbox = document.getElementById("subfolder");
+const maxConnectionsSlider = document.getElementById("maxConnections");
+const maxConnectionsValue = document.getElementById("maxConnectionsValue");
+const debugLoggingCheckbox = document.getElementById("debugLogging");
+
+// --- Open modal
+optionsBtn.addEventListener("click", () => {
+    console.log("[Renderer] Options button clicked");
+    optionsModal.style.display = "block";
+});
+
+// --- Cancel button
+cancelOptions.addEventListener("click", () => {
+    optionsModal.style.display = "none";
+});
+
+// --- Save button (for now just logs values)
+saveOptions.addEventListener("click", () => {
+    const indexingMode = Array.from(indexingRadios).find(r => r.checked).value;
+
+    const options = {
+        savePath: savePathInput.value.trim(),
+        prefix: prefixInput.value.trim(),
+        indexing: indexingMode,
+        subfolder: subfolderCheckbox.checked,
+        maxConnections: parseInt(maxConnectionsSlider.value, 10),
+        debugLogging: debugLoggingCheckbox.checked
     };
 
-    const item = Array.from(resultsList.children)
-        .find(li => normalize(li.dataset.link) === normalize(original));
+    console.log("[Renderer] Options saved:", options);
 
-    if (item) {
-        const statusEl = item.querySelector(".result-status");
-        const linkEl = item.querySelector(".result-link");
+    // Later: send to main process via IPC
+    // window.electronAPI.send("save-options", options);
 
-        if (status === "success" && resolved) {
-            statusEl.textContent = "✅";
-            statusEl.className = "result-status status-success";
-            linkEl.innerHTML = `<a href="${resolved}" target="_blank">${resolved}</a>`;
-        } else if (status === "failed") {
-            statusEl.textContent = "⚠️";
-            statusEl.className = "result-status status-failed";
-            linkEl.textContent = "Failed to resolve";
-        }
-    } else {
-        console.warn("[Renderer] No match found for:", original);
+    optionsModal.style.display = "none";
+});
+
+// --- Update slider label live
+maxConnectionsSlider.addEventListener("input", () => {
+    maxConnectionsValue.textContent = maxConnectionsSlider.value;
+});
+
+// --- Close modal when clicking outside of content
+window.addEventListener("click", (e) => {
+    if (e.target === optionsModal) {
+        optionsModal.style.display = "none";
     }
-});
-
-// --- Helpers ---
-function addResultItem(link, status) {
-    const li = document.createElement("li");
-    li.className = "result-item";
-    li.dataset.link = link;
-
-    const statusEl = document.createElement("div");
-    statusEl.className = "result-status status-" + status;
-    statusEl.textContent = status === "pending" ? "⏳" : "";
-
-    const linkEl = document.createElement("div");
-    linkEl.className = "result-link";
-    linkEl.textContent = link; // show raw link until resolved
-
-    li.appendChild(statusEl);
-    li.appendChild(linkEl);
-    resultsList.appendChild(li);
-}
-
-// --- Splitter logic ---
-let isDragging = false;
-
-splitter.addEventListener("mousedown", () => {
-    isDragging = true;
-    document.body.style.cursor = "row-resize";
-});
-
-window.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-
-    const containerHeight = window.innerHeight;
-    const topHeight = e.clientY;
-    const bottomHeight = containerHeight - topHeight - splitter.offsetHeight;
-
-    topPanel.style.flex = "none";
-    bottomPanel.style.flex = "none";
-    topPanel.style.height = `${topHeight}px`;
-    bottomPanel.style.height = `${bottomHeight}px`;
-});
-
-window.addEventListener("mouseup", () => {
-    isDragging = false;
-    document.body.style.cursor = "default";
 });
