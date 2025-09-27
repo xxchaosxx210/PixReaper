@@ -10,18 +10,8 @@ const tough = require("tough-cookie");
 const jar = new tough.CookieJar();
 const fetchWithCookies = fetchCookie(fetch, jar);
 
-// --- debug flag (defaults to false) ---
-// Enable with env var: PIXREAPER_DEBUG=1 npm start
-let DEBUG = !!process.env.PIXREAPER_DEBUG;
-
-function setDebug(enabled) {
-    DEBUG = !!enabled;
-}
-
-function logDebug(...args) { if (DEBUG) console.log("[hostResolver][DEBUG]", ...args); }
-function logWarn(...args) { console.warn("[hostResolver][WARN]", ...args); }
-function logError(...args) { console.error("[hostResolver][ERROR]", ...args); }
-
+// debug logs
+const { logDebug, logWarn, logError } = require("../utils/logger");
 
 // --- Host resolvers ---
 const hostResolvers = {
@@ -334,5 +324,5 @@ function isSupportedHost(url) {
     }
 }
 
-module.exports = { resolveLink, isSupportedHost, setDebug, logDebug };
+module.exports = { resolveLink, isSupportedHost };
 

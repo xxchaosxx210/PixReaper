@@ -1,7 +1,8 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 // main.js
-const { resolveLink, isSupportedHost, setDebug, logDebug } = require("./logic/hostResolver");
+const { resolveLink, isSupportedHost } = require("./logic/hostResolver");
+const { setDebug, logDebug } = require("./utils/logger");
 
 // enable debugging
 setDebug(true);
