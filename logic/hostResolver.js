@@ -1,28 +1,26 @@
 // logic/hostResolver.js
-// Central place for all host-specific resolvers (Electron + Node + jsdom)
+const fetch = require("node-fetch");
+let fetchCookie = require("fetch-cookie");
+if (fetchCookie.default) fetchCookie = fetchCookie.default; // ESM interop
 
 const { JSDOM } = require("jsdom");
+const tough = require("tough-cookie");
 
-// --- fetch-cookie + node-fetch setup (universal fix) ---
-let fetchCookie = require("fetch-cookie");
-if (fetchCookie.default) {
-    fetchCookie = fetchCookie.default; // handle ESM interop
-}
-const nodeFetch = require("node-fetch");
-const fetch = fetchCookie(nodeFetch);
+// Shared cookie jar for all hosts
+const jar = new tough.CookieJar();
+const fetchWithCookies = fetchCookie(fetch, jar);
 
-// --- Debug logger helpers ---
-const DEBUG = true;
-function logDebug(...args) { if (DEBUG) console.log("[DEBUG]", ...args); }
-function logWarn(...args) { if (DEBUG) console.warn("[WARN]", ...args); }
-function logError(...args) { console.error("[ERROR]", ...args); }
+// --- Debug helpers ---
+function logDebug(...args) { console.log(...args); }
+function logWarn(...args) { console.warn(...args); }
+function logError(...args) { console.error(...args); }
 
-// --- HOST RESOLVERS ---
+// --- Host resolvers ---
 const hostResolvers = {
     // --- Pixhost ---
     "pixhost.to": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`Pixhost HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
@@ -31,7 +29,7 @@ const hostResolvers = {
             if (img && img.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
             logWarn("Pixhost resolver failed:", url);
             return null;
@@ -41,42 +39,47 @@ const hostResolvers = {
         }
     },
 
-    // --- ImageBam ---
+    // --- ImageBam (fixed with cookie injection) ---
     "imagebam.com": async (url) => {
         try {
-            const fetchDoc = async (u) => {
-                const res = await fetch(u);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const html = await res.text();
-                return new JSDOM(html).window.document;
-            };
+            const res1 = await fetchWithCookies(url);
+            if (!res1.ok) throw new Error(`ImageBam HTTP ${res1.status}`);
+            const html1 = await res1.text();
+            const doc1 = new JSDOM(html1).window.document;
 
-            let attempts = 0;
-            let doc = await fetchDoc(url);
-            if (!doc) return null;
+            const continueLink = doc1.querySelector("#continue a[data-shown='inter']");
+            if (continueLink) {
+                logDebug("⚠️ ImageBam interstitial detected, injecting cookie...");
 
-            while (attempts < 2) {
-                attempts++;
+                const cookies = await jar.getCookies(url);
+                const hasCookie = cookies.some(c => c.key === "nsfw_inter");
 
-                const continueLink = doc.querySelector("#continue a[data-shown='inter']");
-                if (continueLink && continueLink.href) {
-                    logDebug("🔎 ImageBam interstitial detected, following continue link...");
-                    doc = await fetchDoc(continueLink.href);
-                    if (!doc) return null;
+                if (!hasCookie) {
+                    jar.setCookieSync("nsfw_inter=1; Domain=.imagebam.com; Path=/", url);
+                    logDebug("🍪 nsfw_inter=1 cookie set");
                 }
 
-                let img =
-                    doc.querySelector("#imageContainer img") ||
-                    doc.querySelector(".main-image") ||
-                    doc.querySelector("img#mainImage");
+                const res2 = await fetchWithCookies(url);
+                if (!res2.ok) throw new Error(`ImageBam retry HTTP ${res2.status}`);
+                const html2 = await res2.text();
+                const doc2 = new JSDOM(html2).window.document;
 
-                if (img && img.src) return new URL(img.src, url).href;
+                const img =
+                    doc2.querySelector("#imageContainer img") ||
+                    doc2.querySelector(".main-image") ||
+                    doc2.querySelector("img#mainImage");
 
-                const og = doc.querySelector('meta[property="og:image"]');
-                if (og && og.content) return new URL(og.content, url).href;
+                if (img?.src) return new URL(img.src, url).href;
+                return null;
             }
 
-            logWarn("⚠️ ImageBam resolver failed after retries:", url);
+            // No continue link (cookie already set)
+            const img =
+                doc1.querySelector("#imageContainer img") ||
+                doc1.querySelector(".main-image") ||
+                doc1.querySelector("img#mainImage");
+
+            if (img?.src) return new URL(img.src, url).href;
             return null;
         } catch (err) {
             logError("ImageBam resolver error:", err);
@@ -87,18 +90,17 @@ const hostResolvers = {
     // --- ImageVenue ---
     "imagevenue.com": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`ImageVenue HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector("img#img");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("ImageVenue resolver failed:", url);
             return null;
         } catch (err) {
             logError("ImageVenue resolver error:", err);
@@ -109,18 +111,17 @@ const hostResolvers = {
     // --- ImgBox ---
     "imgbox.com": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`ImgBox HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector(".img-content img");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("ImgBox resolver failed:", url);
             return null;
         } catch (err) {
             logError("ImgBox resolver error:", err);
@@ -131,15 +132,14 @@ const hostResolvers = {
     // --- PimpAndHost ---
     "pimpandhost.com": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`PimpAndHost HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("PimpAndHost resolver failed:", url);
             return null;
         } catch (err) {
             logError("PimpAndHost resolver error:", err);
@@ -150,18 +150,17 @@ const hostResolvers = {
     // --- PostImage ---
     "postimg.cc": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`PostImage HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector("img#main-image");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("PostImage resolver failed:", url);
             return null;
         } catch (err) {
             logError("PostImage resolver error:", err);
@@ -172,18 +171,17 @@ const hostResolvers = {
     // --- TurboImageHost ---
     "turboimagehost.com": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`TurboImageHost HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector("img.pic");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("TurboImageHost resolver failed:", url);
             return null;
         } catch (err) {
             logError("TurboImageHost resolver error:", err);
@@ -191,45 +189,42 @@ const hostResolvers = {
         }
     },
 
-    // --- FastPic ---
+    // --- FastPic (org + ru) ---
     "fastpic.org": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`FastPic HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector("img");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("FastPic resolver failed:", url);
             return null;
         } catch (err) {
             logError("FastPic resolver error:", err);
             return null;
         }
     },
-
     "fastpic.ru": async (url) => hostResolvers["fastpic.org"](url),
 
     // --- ImageTwist ---
     "imagetwist.com": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`ImageTwist HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector("img#image");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("ImageTwist resolver failed:", url);
             return null;
         } catch (err) {
             logError("ImageTwist resolver error:", err);
@@ -240,18 +235,17 @@ const hostResolvers = {
     // --- ImgView ---
     "imgview.net": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`ImgView HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector("img.pic");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("ImgView resolver failed:", url);
             return null;
         } catch (err) {
             logError("ImgView resolver error:", err);
@@ -262,18 +256,17 @@ const hostResolvers = {
     // --- Radikal ---
     "radikal.ru": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`Radikal HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector("img#mainImage");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("Radikal resolver failed:", url);
             return null;
         } catch (err) {
             logError("Radikal resolver error:", err);
@@ -284,18 +277,17 @@ const hostResolvers = {
     // --- ImageUpper ---
     "imageupper.com": async (url) => {
         try {
-            const res = await fetch(url);
+            const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`ImageUpper HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
             let img = doc.querySelector("img#img");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og && og.content) return new URL(og.content, url).href;
+            if (og?.content) return new URL(og.content, url).href;
 
-            logWarn("ImageUpper resolver failed:", url);
             return null;
         } catch (err) {
             logError("ImageUpper resolver error:", err);
@@ -312,7 +304,6 @@ async function resolveLink(url) {
             hostname.endsWith(host)
         );
         if (resolverKey) {
-            logDebug(`Resolving ${url} with resolver for ${resolverKey}`);
             return await hostResolvers[resolverKey](url);
         }
         logWarn("No resolver for host:", hostname);
@@ -323,10 +314,13 @@ async function resolveLink(url) {
     }
 }
 
+// --- Host support checker ---
 function isSupportedHost(url) {
     try {
         const hostname = new URL(url).hostname.replace(/^www\./, "");
-        return Object.keys(hostResolvers).some((host) => hostname.endsWith(host));
+        return Object.keys(hostResolvers).some((host) =>
+            hostname.endsWith(host)
+        );
     } catch {
         return false;
     }
