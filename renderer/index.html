@@ -1,31 +1,28 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>PixReaper</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css" />
 </head>
 
 <body>
-    <div id="container">
-        <div id="browserPanel">
-            <div id="addressBar">
-                <input type="text" id="urlInput" placeholder="Enter URL here" />
-                <button id="goButton">Go</button>
-                <button id="scanButton">Scan Page</button>
-            </div>
-            <!-- No preload attribute here; your main window already has preload set -->
-            <webview id="browser" src="http://vintage-erotica-forum.com/t19913-p3-jodie-oram-uk.html" allowpopups>
-            </webview>
+    <div id="top-panel">
+        <div id="nav-bar">
+            <input type="text" id="urlInput" placeholder="Enter URL..." />
+            <button id="goBtn">Go</button>
+            <button id="scanBtn">Scan Page</button>
         </div>
+        <webview id="browserView" src="http://vintage-erotica-forum.com/t19913-p3-jodie-oram-uk.html" allowpopups>
+        </webview>
+    </div>
 
-        <div id="splitter" title="Drag to resize"></div>
+    <div id="splitter"></div>
 
-        <div id="resultsPanel">
-            <h3>Results</h3>
-            <ul id="resultsList"></ul>
-        </div>
+    <div id="bottom-panel">
+        <h3>Results</h3>
+        <ul id="results"></ul>
     </div>
 
     <script src="renderer.js"></script>
