@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 <head>
     <meta charset="UTF-8">
@@ -8,28 +8,24 @@
 </head>
 
 <body>
-    <header>
-        <h1>PixReaper</h1>
-    </header>
+    <div id="container">
+        <div id="browserPanel">
+            <div id="addressBar">
+                <input type="text" id="urlInput" placeholder="Enter URL here" />
+                <button id="goButton">Go</button>
+                <button id="scanButton">Scan Page</button>
+            </div>
+            <!-- No preload attribute here; your main window already has preload set -->
+            <webview id="browser" src="https://vintage-erotica-forum.com/" allowpopups></webview>
+        </div>
 
-    <div class="toolbar">
-        <input type="text" id="urlInput" placeholder="https://www.example.com">
-        <button id="goBtn">Go</button>
+        <div id="splitter" title="Drag to resize"></div>
+
+        <div id="resultsPanel">
+            <h3>Results</h3>
+            <ul id="resultsList"></ul>
+        </div>
     </div>
-
-    <!-- Embedded browser -->
-    <webview id="browser" src="http://vintage-erotica-forum.com/t19913-p3-jodie-oram-uk.html"></webview>
-
-    <!-- Results panel -->
-    <div id="results">
-        <p>No results yet. Click Scan Page to extract links.</p>
-    </div>
-
-    <footer>
-        <button id="scanBtn">Scan Page</button>
-        <button id="downloadBtn">Download</button>
-        <button id="optionsBtn">Options</button>
-    </footer>
 
     <script src="renderer.js"></script>
 </body>

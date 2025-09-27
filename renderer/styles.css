@@ -1,91 +1,84 @@
-/* Reset & Base Layout */
+html,
 body {
-    font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
+    height: 100%;
+    overflow: hidden;
+    font-family: sans-serif;
+}
+
+#container {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    overflow: hidden;
 }
 
-/* Header */
-header {
-    background: #f5f5f5;
-    padding: 0.5rem 1rem;
-    border-bottom: 1px solid #ccc;
-}
-
-h1 {
-    margin: 0;
-    font-size: 1.2rem;
-    font-weight: bold;
-}
-
-/* Toolbar (URL bar + Go button) */
-.toolbar {
+/* 50/50 split at startup */
+#browserPanel {
+    height: 50%;
+    min-height: 120px;
+    background: #f0f0f0;
     display: flex;
-    padding: 0.5rem;
-    border-bottom: 1px solid #ccc;
-    background: #fafafa;
+    flex-direction: column;
 }
 
-.toolbar input {
-    flex: 1;
-    padding: 0.5rem;
-    margin-right: 0.5rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-
-.toolbar button {
-    padding: 0.5rem 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background: #eee;
-    cursor: pointer;
-}
-
-.toolbar button:hover {
+#addressBar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 6px;
     background: #ddd;
+    border-bottom: 1px solid #ccc;
 }
 
-/* Webview (embedded browser) */
+#addressBar input {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 14px;
+}
+
 #browser {
     flex: 1;
-    border: none;
-    background: white;
+    width: 100%;
+    border: 0;
+    background: #fff;
 }
 
-/* Results area */
-#results {
-    height: 150px;
-    overflow-y: auto;
-    border-top: 1px solid #ccc;
-    padding: 0.5rem;
+#splitter {
+    height: 6px;
+    background: #cfcfcf;
+    cursor: row-resize;
+    border-top: 1px solid #bbb;
+    border-bottom: 1px solid #bbb;
+    /* keep on top so drags don't get “eaten” */
+    position: relative;
+    z-index: 2;
+}
+
+#resultsPanel {
+    height: 50%;
+    min-height: 100px;
     background: #fafafa;
-    font-size: 0.9rem;
+    overflow: auto;
+    padding: 8px;
+}
+
+#resultsPanel h3 {
+    margin: 6px 0 8px;
+    font-size: 14px;
     color: #333;
 }
 
-/* Footer (Scan/Download buttons) */
-footer {
-    display: flex;
-    justify-content: space-around;
-    padding: 0.5rem;
-    border-top: 1px solid #ccc;
-    background: #f5f5f5;
+#resultsList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
 }
 
-footer button {
-    flex: 1;
-    margin: 0 0.25rem;
-    padding: 0.5rem 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background: #eee;
-    cursor: pointer;
-}
-
-footer button:hover {
-    background: #ddd;
+#resultsList li {
+    font-size: 13px;
+    padding: 4px 0;
+    border-bottom: 1px dashed #e4e4e4;
+    word-break: break-all;
 }

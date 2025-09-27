@@ -12,8 +12,8 @@ setDebug(true);
 
 function createWindow() {
     const win = new BrowserWindow({
-        width: 640,
-        height: 480,
+        width: 1024,
+        height: 768,
         autoHideMenuBar: true,
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
@@ -23,8 +23,9 @@ function createWindow() {
         },
     });
 
-    win.loadFile("renderer/index.html");
+    win.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
+
 
 // Logging from renderer
 ipcMain.on("renderer-log", (event, message) => {

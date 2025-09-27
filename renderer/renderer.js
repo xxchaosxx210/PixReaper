@@ -1,81 +1,93 @@
-const goBtn = document.getElementById("goBtn");
+// DOM nodes
+const container = document.getElementById("container");
+const browserPanel = document.getElementById("browserPanel");
+const resultsPanel = document.getElementById("resultsPanel");
+const splitter = document.getElementById("splitter");
+
 const urlInput = document.getElementById("urlInput");
-const browser = document.getElementById("browser");
-const scanBtn = document.getElementById("scanBtn");
-const resultsDiv = document.getElementById("results");
+const goButton = document.getElementById("goButton");
+const scanButton = document.getElementById("scanButton");
+const webview = document.getElementById("browser");
+const resultsList = document.getElementById("resultsList");
 
-function navigate() {
-    let url = urlInput.value.trim();
-    if (!url) return;
-
-    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-        url = "https://" + url;
-    }
-
-    browser.src = url;
-    window.logger.log("Navigating to: " + url);
+// --- Navigation ---
+function navigateTo(input) {
+    const raw = (input || "").trim();
+    if (!raw) return;
+    const url = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+    webview.src = url;
 }
 
-// Navigation handlers
-goBtn.addEventListener("click", navigate);
-urlInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") navigate();
-});
-browser.addEventListener("did-navigate", (event) => {
-    urlInput.value = event.url;
-});
-browser.addEventListener("did-navigate-in-page", (event) => {
-    urlInput.value = event.url;
+goButton.addEventListener("click", () => navigateTo(urlInput.value));
+urlInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") navigateTo(urlInput.value);
 });
 
-// Scan Page button
-// Scan Page button
-scanBtn.addEventListener("click", async () => {
-    window.logger.log("Scan Page clicked");
+// Keep address bar in sync when user clicks links in the webview
+webview.addEventListener("did-navigate", (e) => { urlInput.value = e.url || ""; });
+webview.addEventListener("did-navigate-in-page", (e) => { urlInput.value = e.url || ""; });
 
-    // Extract only supported host links from webview DOM
-    const viewerLinks = await browser.executeJavaScript(`
+// --- Scan Page (uses preload-exposed API, NOT require('electron')) ---
+scanButton.addEventListener("click", async () => {
+    console.log("[Renderer] Scan Page clicked");
+
+    // Pull candidate viewer links from the current page
+    const viewerLinks = await webview.executeJavaScript(`
     Array.from(document.querySelectorAll("a[href] img"))
-      .map(img => img.parentElement.href)
-      .filter(href => href && href.match(/(imagebam|imgbox|pixhost|imagevenue|pimpandhost|postimg|turboimagehost|fastpic|imagetwist|imgview|radikal|imageupper)/i))
+      .map(img => img.parentElement && img.parentElement.href)
+      .filter(Boolean)
   `);
 
-    window.logger.log("Found candidate viewer links: " + viewerLinks.length);
+    console.log("[Renderer] Found candidate viewer links:", viewerLinks.length);
 
-    resultsDiv.innerHTML = "";
-    if (viewerLinks.length === 0) {
-        resultsDiv.textContent = "No supported viewer links found.";
-        return;
+    // Clear previous results and kick off scan in main
+    resultsList.innerHTML = "";
+    if (window.electronAPI && typeof window.electronAPI.scanPage === "function") {
+        window.electronAPI.scanPage(viewerLinks);
+    } else {
+        console.error("electronAPI.scanPage is not available from preload.");
     }
-
-    // Build UI with "Resolving…" placeholder rows
-    const list = document.createElement("ul");
-    viewerLinks.forEach((link, index) => {
-        const li = document.createElement("li");
-        li.id = `result-${index}`;
-        li.textContent = `${link}  —  Resolving…`;
-        list.appendChild(li);
-    });
-    resultsDiv.appendChild(list);
-
-    // Send to main process for actual resolving
-    window.electronAPI.scanPage(viewerLinks);
 });
 
-// Receive progressive updates from main process
-window.electronAPI.onScanProgress((payload) => {
-    const { index, url, status, resolved } = payload;
-    const li = document.getElementById(`result-${index}`);
-    if (!li) return;
+// Stream progress back into the results panel
+if (window.electronAPI && typeof window.electronAPI.onScanProgress === "function") {
+    window.electronAPI.onScanProgress(({ index, total, url, direct, error }) => {
+        const li = document.createElement("li");
+        if (error) {
+            li.textContent = `(${index + 1}/${total}) [FAIL] ${url} — ${error}`;
+        } else if (direct) {
+            li.textContent = `(${index + 1}/${total}) ${direct}`;
+        } else {
+            li.textContent = `(${index + 1}/${total}) [unresolved] ${url}`;
+        }
+        resultsList.appendChild(li);
+    });
+} else {
+    console.warn("electronAPI.onScanProgress is not wired; check preload.js");
+}
 
-    if (status === "ok") {
-        const a = document.createElement("a");
-        a.href = resolved;
-        a.textContent = resolved;
-        a.target = "_blank";
-        li.innerHTML = `${url}  —  ✅ `;
-        li.appendChild(a);
-    } else if (status === "failed") {
-        li.innerHTML = `${url}  —  ❌ Failed`;
-    }
+// --- Splitter drag logic (top/bottom) ---
+let isDragging = false;
+
+splitter.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    isDragging = true;
+    document.body.style.cursor = "row-resize";
+});
+
+document.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+
+    const rect = container.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const pct = Math.max(10, Math.min(90, (y / rect.height) * 100)); // clamp 10–90%
+
+    browserPanel.style.height = `${pct}%`;
+    resultsPanel.style.height = `${100 - pct}%`;
+});
+
+document.addEventListener("mouseup", () => {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.style.cursor = "default";
 });
