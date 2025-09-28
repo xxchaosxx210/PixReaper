@@ -47,6 +47,8 @@ window.electronAPI.receive("scan-progress", (data) => {
     </a>
   `;
     resultsList.appendChild(li);
+    document.getElementById("downloadBtn").style.display = "inline-block";
+
 });
 
 // --- Options Modal Logic ---
