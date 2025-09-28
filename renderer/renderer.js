@@ -10,10 +10,9 @@ const browsePathBtn = document.getElementById("browsePath");
 
 browsePathBtn.addEventListener("click", () => {
     console.log("[Renderer] Browse for folder...");
-    window.electronAPI.send("choose-folder"); // ask main process
+    window.electronAPI.send("choose-folder");
 });
 
-// Receive chosen folder path
 window.electronAPI.receive("choose-folder:result", (folderPath) => {
     if (folderPath) {
         console.log("[Renderer] Folder chosen:", folderPath);
@@ -29,17 +28,31 @@ goButton.addEventListener("click", () => {
     webview.loadURL(url);
 });
 
-// Update address bar when webview navigates
 webview.addEventListener("did-navigate", (event) => {
     urlInput.value = event.url;
 });
 
-// Request scan of current webview page
+// --- Results List ---
+const resultsList = document.getElementById("results");
+let currentManifest = [];
+let imagesFound = 0;
+let downloadTotal = 0;
+let downloadCompleted = 0;
+
+// --- Status Bar Elements ---
+const statusText = document.getElementById("statusText");
+const imagesFoundText = document.getElementById("imageCount"); // fixed ID
+const progressBar = document.getElementById("progressBar");   // fixed ID
+
+// --- Scan ---
 scanButton.addEventListener("click", async () => {
-    // ✅ Reset before starting a new scan
     resultsList.innerHTML = "";
     currentManifest = [];
     downloadBtn.style.display = "none";
+    imagesFound = 0;
+    imagesFoundText.textContent = "Images found: 0";
+    statusText.textContent = "Status: Scanning...";
+    progressBar.style.width = "0%";
 
     const viewerLinks = await webview.executeJavaScript(`
         Array.from(document.querySelectorAll("a[href]"))
@@ -50,10 +63,6 @@ scanButton.addEventListener("click", async () => {
     console.log("[Renderer] Found links in page:", viewerLinks.length);
     window.electronAPI.send("scan-page", viewerLinks);
 });
-
-// --- Results List ---
-const resultsList = document.getElementById("results");
-let currentManifest = [];
 
 window.electronAPI.receive("scan-progress", (data) => {
     console.log("[Renderer] Got scan-progress:", data);
@@ -71,6 +80,9 @@ window.electronAPI.receive("scan-progress", (data) => {
     `;
     resultsList.appendChild(li);
 
+    imagesFound++;
+    imagesFoundText.textContent = `Images found: ${imagesFound}`;
+
     if (resultsList.children.length === 1) {
         downloadBtn.style.display = "inline-block";
     }
@@ -84,22 +96,15 @@ const saveOptions = document.getElementById("saveOptions");
 const maxConnections = document.getElementById("maxConnections");
 const maxConnectionsValue = document.getElementById("maxConnectionsValue");
 
-// Open modal
 optionsButton.addEventListener("click", () => {
     optionsModal.style.display = "block";
 });
-
-// Close modal without saving
 cancelOptions.addEventListener("click", () => {
     optionsModal.style.display = "none";
 });
-
-// Slider live update
 maxConnections.addEventListener("input", () => {
     maxConnectionsValue.textContent = maxConnections.value;
 });
-
-// Save options
 saveOptions.addEventListener("click", () => {
     const newOptions = {
         prefix: document.getElementById("prefix").value.trim(),
@@ -107,17 +112,14 @@ saveOptions.addEventListener("click", () => {
         createSubfolder: document.getElementById("subfolder").checked,
         maxConnections: parseInt(document.getElementById("maxConnections").value, 10)
     };
-
     console.log("[Renderer] Saving options:", newOptions);
     window.electronAPI.send("options:save", newOptions);
-
-    optionsModal.style.display = "none"; // close modal after save
+    optionsModal.style.display = "none";
 });
 
 // --- Download Manifest ---
 const downloadBtn = document.getElementById("downloadBtn");
 
-// Helper: sanitize filenames (basic)
 function sanitizeFilename(name) {
     return name.replace(/[<>:"/\\|?*]+/g, "_");
 }
@@ -126,7 +128,6 @@ downloadBtn.addEventListener("click", () => {
     console.log("[Renderer] Building download manifest...");
     downloadBtn.style.display = "none";
 
-    // Get current options
     const options = {
         prefix: document.getElementById("prefix").value.trim(),
         savePath: document.getElementById("savePath").value.trim(),
@@ -134,9 +135,8 @@ downloadBtn.addEventListener("click", () => {
         indexing: document.querySelector('input[name="indexing"]:checked').value,
     };
 
-    // ✅ Default save path if empty
     if (!options.savePath) {
-        options.savePath = "PixReaper"; // will be resolved into Downloads/PixReaper
+        options.savePath = "PixReaper";
     }
 
     const items = resultsList.querySelectorAll("li a");
@@ -182,6 +182,11 @@ downloadBtn.addEventListener("click", () => {
         link.closest("li").setAttribute("data-index", index);
     });
 
+    downloadTotal = currentManifest.length;
+    downloadCompleted = 0;
+    statusText.textContent = `Status: Downloading (0/${downloadTotal}) — 0%`;
+    progressBar.style.width = "0%";
+
     window.electronAPI.send("download:start", {
         manifest: currentManifest,
         options: {
@@ -197,11 +202,9 @@ downloadBtn.addEventListener("click", () => {
 // --- IPC: Options Load/Save ---
 window.electronAPI.receive("options:load", (opt) => {
     console.log("[Renderer] Loaded options:", opt);
-
     document.getElementById("prefix").value = opt.prefix ?? "";
     document.getElementById("savePath").value = opt.savePath ?? "";
     document.getElementById("subfolder").checked = !!opt.createSubfolder;
-
     const slider = document.getElementById("maxConnections");
     slider.value = opt.maxConnections ?? 10;
     maxConnectionsValue.textContent = slider.value;
@@ -215,18 +218,20 @@ window.electronAPI.receive("options:saved", (saved) => {
 window.electronAPI.receive("scan-complete", () => {
     if (resultsList.children.length > 0) {
         downloadBtn.style.display = "inline-block";
-        console.log("[Renderer] Scan complete — Download button enabled.");
+        statusText.textContent = "Status: Scan complete. Ready to download.";
     } else {
-        console.log("[Renderer] Scan complete — no results found.");
+        statusText.textContent = "Status: Scan complete — no results found.";
     }
 });
 
 // --- IPC: Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
-    console.log("[Renderer] Download progress:", data);
+    downloadCompleted = currentManifest.filter((e) => e.status === "success").length;
+    const percent = ((downloadCompleted / downloadTotal) * 100).toFixed(1);
+    statusText.textContent = `Status: Downloading (${downloadCompleted}/${downloadTotal}) — ${percent}%`;
+    progressBar.style.width = `${percent}%`;
 
     const { index, status, savePath } = data;
-
     const entry = currentManifest.find((e) => e.index === index);
     if (entry) {
         entry.status = status;
@@ -236,9 +241,7 @@ window.electronAPI.receive("download:progress", (data) => {
     const li = resultsList.querySelector(`li[data-index="${index}"]`);
     if (li) {
         const icon = li.querySelector(".status-icon");
-        if (icon) {
-            icon.className = `status-icon ${status}`;
-        }
+        if (icon) icon.className = `status-icon ${status}`;
         const link = li.querySelector("a");
         if (link) {
             const fileUrl = "file:///" + savePath.replace(/\\/g, "/");
@@ -251,4 +254,6 @@ window.electronAPI.receive("download:progress", (data) => {
 
 window.electronAPI.receive("download:complete", () => {
     console.log("[Renderer] All downloads complete.");
+    statusText.textContent = "Status: All downloads complete.";
+    progressBar.style.width = "100%";
 });

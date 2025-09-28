@@ -16,20 +16,27 @@
             <button id="optionsBtn">⚙️ Options</button>
         </div>
 
-        <webview id="browserView" src="http://vintage-erotica-forum.com/t19913-p3-jodie-oram-uk.html" allowpopups>
+        <webview id="browserView" src="http://vintage-erotica-forum.com/t442928-dee-uk.html" allowpopups>
         </webview>
     </div>
 
     <div id="splitter"></div>
 
-    <div id="bottom-panel">
-        <div id="resultsHeader">
-            <h3>Results</h3>
-            <button id="downloadBtn" style="display:none;">⬇ Download</button>
-        </div>
-        <ul id="results"></ul>
+    <!-- ✅ Status Bar -->
+    <div id="status-bar">
+        <span id="statusText">Status: Ready</span>
+        <span id="imageCount">Images found: 0</span>
+        <button id="downloadBtn" style="display:none;">⬇ Download</button>
     </div>
 
+    <!-- ✅ Progress Bar -->
+    <div id="progressContainer">
+        <div id="progressBar"></div>
+    </div>
+
+    <div id="bottom-panel">
+        <ul id="results"></ul>
+    </div>
 
     <!-- ⚙️ Options Modal -->
     <div id="optionsModal" class="modal">
@@ -41,7 +48,6 @@
                 <input type="text" id="savePath" placeholder="e.g. C:\Users\Test\Downloads\PixReaper" />
                 <button type="button" id="browsePath">Browse</button>
             </div>
-
 
             <label>Filename Prefix:</label>
             <input type="text" id="prefix" placeholder="PixReaper_" />
