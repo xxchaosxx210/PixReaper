@@ -49,8 +49,10 @@ window.electronAPI.receive("scan-progress", (data) => {
     </a>
   `;
     resultsList.appendChild(li);
-    document.getElementById("downloadBtn").style.display = "inline-block";
-
+    // Show the Download button if it’s still hidden
+    if (resultsList.children.length === 1) {
+        downloadBtn.style.display = "inline-block";
+    }
 });
 
 // --- Options Modal Logic ---
@@ -103,6 +105,9 @@ function sanitizeFilename(name) {
 
 downloadBtn.addEventListener("click", () => {
     console.log("[Renderer] Building download manifest...");
+    // Hide the button once download starts
+    downloadBtn.style.display = "none";
+
 
     // Get current options (last loaded from main)
     // For now, reuse values directly from the modal fields
