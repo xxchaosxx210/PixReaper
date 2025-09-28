@@ -4,7 +4,7 @@ const { resolveLink } = require("./logic/hostResolver");
 const { logDebug, logError } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
-
+const { dialog } = require("electron");
 
 
 let mainWindow;
@@ -80,6 +80,19 @@ app.whenReady().then(() => {
             logError("[Main] Download error:", err);
         }
     });
+
+    ipcMain.on("choose-folder", async (event) => {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ["openDirectory", "createDirectory"]
+        });
+
+        if (!result.canceled && result.filePaths.length > 0) {
+            event.sender.send("choose-folder:result", result.filePaths[0]);
+        } else {
+            event.sender.send("choose-folder:result", null);
+        }
+    });
+
 
 });
 

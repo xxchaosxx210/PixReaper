@@ -36,11 +36,12 @@
         <div class="modal-content">
             <h2>⚙️ PixReaper Options</h2>
 
-            <label>Save Path:</label>
-            <div class="row">
-                <input type="text" id="savePath" placeholder="C:\\Users\\chaos\\Downloads\\Pix" />
-                <button id="browseBtn">Browse…</button>
+            <label for="savePath">Save Path</label>
+            <div style="display:flex; gap:6px;">
+                <input type="text" id="savePath" placeholder="e.g. C:\Users\Test\Downloads\PixReaper" />
+                <button type="button" id="browsePath">Browse</button>
             </div>
+
 
             <label>Filename Prefix:</label>
             <input type="text" id="prefix" placeholder="PixReaper_" />

@@ -6,6 +6,20 @@ const webview = document.getElementById("browserView");
 const urlInput = document.getElementById("urlInput");
 const goButton = document.getElementById("goBtn");
 const scanButton = document.getElementById("scanBtn");
+const browsePathBtn = document.getElementById("browsePath");
+
+browsePathBtn.addEventListener("click", () => {
+    console.log("[Renderer] Browse for folder...");
+    window.electronAPI.send("choose-folder"); // ask main process
+});
+
+// Receive chosen folder path
+window.electronAPI.receive("choose-folder:result", (folderPath) => {
+    if (folderPath) {
+        console.log("[Renderer] Folder chosen:", folderPath);
+        document.getElementById("savePath").value = folderPath;
+    }
+});
 
 goButton.addEventListener("click", () => {
     let url = urlInput.value.trim();
