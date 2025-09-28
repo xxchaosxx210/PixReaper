@@ -186,6 +186,12 @@ body {
     /* grey for pending */
 }
 
+.status-icon.retrying {
+    background-color: #ff9800;
+    /* orange */
+}
+
+
 
 /* --- Modal --- */
 .modal {

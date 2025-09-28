@@ -250,6 +250,7 @@ window.electronAPI.receive("scan-complete", () => {
 });
 
 // --- IPC: Download Progress ---
+// --- IPC: Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
     downloadCompleted = currentManifest.filter((e) => e.status === "success").length;
     const percent = ((downloadCompleted / downloadTotal) * 100).toFixed(1);
@@ -267,12 +268,21 @@ window.electronAPI.receive("download:progress", (data) => {
     if (li) {
         const icon = li.querySelector(".status-icon");
         if (icon) icon.className = `status-icon ${status}`;
+
         const link = li.querySelector("a");
         if (link) {
-            const fileUrl = "file:///" + savePath.replace(/\\/g, "/");
-            link.textContent = savePath;
-            link.setAttribute("href", fileUrl);
-            link.setAttribute("target", "_blank");
+            if (status === "success") {
+                const fileUrl = "file:///" + savePath.replace(/\\/g, "/");
+                link.textContent = savePath;
+                link.setAttribute("href", fileUrl);
+                link.setAttribute("target", "_blank");
+            } else if (status === "retrying") {
+                link.textContent = "Retrying download...";
+                link.removeAttribute("href");
+            } else if (status === "failed") {
+                link.textContent = "Failed: " + link.textContent;
+                link.removeAttribute("href");
+            }
         }
     }
 });
