@@ -124,6 +124,12 @@ body {
     /* red */
 }
 
+.status-icon.pending {
+    background-color: #aaa;
+    /* grey for pending */
+}
+
+
 /* --- Modal --- */
 .modal {
     display: none;

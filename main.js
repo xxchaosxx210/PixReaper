@@ -3,6 +3,8 @@ const path = require("path");
 const { resolveLink } = require("./logic/hostResolver");
 const { logDebug, logError } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
+const downloader = require("./logic/downloader");
+
 
 
 let mainWindow;
@@ -53,6 +55,32 @@ app.whenReady().then(() => {
             createWindow();
         }
     });
+
+    // IPC: start downloads
+    ipcMain.on("download:start", async (event, { manifest, options }) => {
+        logDebug("[Main] Starting downloads:", manifest.length, "files");
+
+        try {
+            await downloader.startDownload(
+                manifest,
+                options,
+                (index, status, savePath) => {
+                    // Forward progress updates to renderer
+                    event.sender.send("download:progress", {
+                        index,
+                        status,
+                        savePath,
+                    });
+                }
+            );
+
+            logDebug("[Main] All downloads finished.");
+            event.sender.send("download:complete"); // ✅ notify renderer when done
+        } catch (err) {
+            logError("[Main] Download error:", err);
+        }
+    });
+
 });
 
 app.on("window-all-closed", () => {

@@ -24,38 +24,36 @@ webview.addEventListener("did-navigate", (event) => {
 scanButton.addEventListener("click", async () => {
     // ✅ Reset before starting a new scan
     resultsList.innerHTML = "";
-    currentManifest = []; // you'll need to define this at top-level
+    currentManifest = [];
     downloadBtn.style.display = "none";
 
     const viewerLinks = await webview.executeJavaScript(`
-    Array.from(document.querySelectorAll("a[href]"))
-      .map(a => a.href)
-      .filter(href => href && href.match(/(imagebam|imgbox|pixhost|imagevenue|pimpandhost)/i))
-  `);
+        Array.from(document.querySelectorAll("a[href]"))
+          .map(a => a.href)
+          .filter(href => href && href.match(/(imagebam|imgbox|pixhost|imagevenue|pimpandhost)/i))
+    `);
 
     console.log("[Renderer] Found links in page:", viewerLinks.length);
     window.electronAPI.send("scan-page", viewerLinks);
 });
 
-
-
 // --- Results List ---
 const resultsList = document.getElementById("results");
 let currentManifest = [];
-
 
 window.electronAPI.receive("scan-progress", (data) => {
     console.log("[Renderer] Got scan-progress:", data);
 
     const li = document.createElement("li");
-    li.className = data.status;
+    li.className = "pending";
     li.innerHTML = `
-    <span class="status-icon ${data.status}"></span>
-    <a href="${data.resolved || data.original}" target="_blank">
-      ${data.resolved || data.original}
-    </a>
-  `;
+        <span class="status-icon pending"></span>
+        <a href="${data.resolved || data.original}" target="_blank">
+          ${data.resolved || data.original}
+        </a>
+    `;
     resultsList.appendChild(li);
+
     // Show the Download button if it’s still hidden
     if (resultsList.children.length === 1) {
         downloadBtn.style.display = "inline-block";
@@ -100,9 +98,7 @@ saveOptions.addEventListener("click", () => {
     optionsModal.style.display = "none"; // close modal after save
 });
 
-// --- IPC: Options Load/Save ---
-
-// --- Download Manifest Preview ---
+// --- Download Manifest ---
 const downloadBtn = document.getElementById("downloadBtn");
 
 // Helper: sanitize filenames (basic)
@@ -115,9 +111,7 @@ downloadBtn.addEventListener("click", () => {
     // Hide the button once download starts
     downloadBtn.style.display = "none";
 
-
     // Get current options (last loaded from main)
-    // For now, reuse values directly from the modal fields
     const options = {
         prefix: document.getElementById("prefix").value.trim(),
         savePath: document.getElementById("savePath").value.trim(),
@@ -153,7 +147,7 @@ downloadBtn.addEventListener("click", () => {
             filename = `${options.prefix}${base}`;
         }
 
-        // Build savePath
+        // Build savePath (main will normalize to Windows form)
         let folder = options.savePath;
         if (options.createSubfolder) {
             const sub = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
@@ -170,19 +164,24 @@ downloadBtn.addEventListener("click", () => {
             savePath,
         });
 
-        // Update UI: replace link text with savePath
-        link.textContent = savePath;
-
         // ✅ Add data-index to the parent <li>
         link.closest("li").setAttribute("data-index", index);
     });
 
-    console.log("[Renderer] Download manifest:", currentManifest);
-
+    // Send manifest + options to main for downloading
+    window.electronAPI.send("download:start", {
+        manifest: currentManifest,
+        options: {
+            prefix: options.prefix,
+            savePath: options.savePath,
+            createSubfolder: options.createSubfolder,
+            indexing: options.indexing,
+            maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
+        }
+    });
 });
 
-
-// Fill modal fields when options are loaded
+// --- IPC: Options Load/Save ---
 window.electronAPI.receive("options:load", (opt) => {
     console.log("[Renderer] Loaded options:", opt);
 
@@ -195,7 +194,6 @@ window.electronAPI.receive("options:load", (opt) => {
     maxConnectionsValue.textContent = slider.value;
 });
 
-// Confirm when options are saved
 window.electronAPI.receive("options:saved", (saved) => {
     console.log("[Renderer] Options saved:", saved);
     // Optional: add a UI confirmation here
@@ -208,4 +206,37 @@ window.electronAPI.receive("scan-complete", () => {
     } else {
         console.log("[Renderer] Scan complete — no results found.");
     }
+});
+
+// --- IPC: Download Progress ---
+window.electronAPI.receive("download:progress", (data) => {
+    console.log("[Renderer] Download progress:", data);
+
+    const { index, status, savePath } = data;
+
+    // Update manifest entry
+    const entry = currentManifest.find((e) => e.index === index);
+    if (entry) {
+        entry.status = status;
+        entry.savePath = savePath; // ✅ normalized path from main
+    }
+
+    // Update UI: find the correct <li> via data-index
+    const li = resultsList.querySelector(`li[data-index="${index}"]`);
+    if (li) {
+        const icon = li.querySelector(".status-icon");
+        if (icon) {
+            icon.className = `status-icon ${status}`;
+        }
+        // ✅ Update link text to normalized savePath
+        const link = li.querySelector("a");
+        if (link) {
+            link.textContent = savePath;
+        }
+    }
+});
+
+window.electronAPI.receive("download:complete", () => {
+    console.log("[Renderer] All downloads complete.");
+    // Optional: show a toast or re-enable Download button
 });

@@ -14,22 +14,27 @@ const streamPipeline = promisify(pipeline);
  * Download a single file from URL to savePath
  */
 async function downloadFile(url, savePath) {
-    await fs.promises.mkdir(path.dirname(savePath), { recursive: true });
+    // ✅ Normalize path for Windows/macOS/Linux
+    const safePath = path.normalize(savePath);
+
+    await fs.promises.mkdir(path.dirname(safePath), { recursive: true });
 
     return new Promise((resolve, reject) => {
         const client = url.startsWith("https") ? https : http;
 
-        client.get(url, (res) => {
-            if (res.statusCode !== 200) {
-                reject(new Error(`HTTP ${res.statusCode}`));
-                return;
-            }
+        client
+            .get(url, (res) => {
+                if (res.statusCode !== 200) {
+                    reject(new Error(`HTTP ${res.statusCode}`));
+                    return;
+                }
 
-            const fileStream = fs.createWriteStream(savePath);
-            streamPipeline(res, fileStream)
-                .then(() => resolve(true))
-                .catch(reject);
-        }).on("error", reject);
+                const fileStream = fs.createWriteStream(safePath);
+                streamPipeline(res, fileStream)
+                    .then(() => resolve(true))
+                    .catch(reject);
+            })
+            .on("error", reject);
     });
 }
 
@@ -58,12 +63,12 @@ async function startDownload(manifest, options, onProgress) {
                 downloadFile(item.url, item.savePath)
                     .then(() => {
                         item.status = "success";
-                        onProgress(item.index, "success", item.savePath);
+                        onProgress(item.index, "success", path.normalize(item.savePath));
                     })
                     .catch((err) => {
                         console.error("[Downloader] Failed:", item.url, err.message);
                         item.status = "failed";
-                        onProgress(item.index, "failed", item.savePath);
+                        onProgress(item.index, "failed", path.normalize(item.savePath));
                     })
                     .finally(() => {
                         active--;
