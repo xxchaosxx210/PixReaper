@@ -22,6 +22,11 @@ webview.addEventListener("did-navigate", (event) => {
 
 // Request scan of current webview page
 scanButton.addEventListener("click", async () => {
+    // ✅ Reset before starting a new scan
+    resultsList.innerHTML = "";
+    currentManifest = []; // you'll need to define this at top-level
+    downloadBtn.style.display = "none";
+
     const viewerLinks = await webview.executeJavaScript(`
     Array.from(document.querySelectorAll("a[href]"))
       .map(a => a.href)
@@ -36,6 +41,8 @@ scanButton.addEventListener("click", async () => {
 
 // --- Results List ---
 const resultsList = document.getElementById("results");
+let currentManifest = [];
+
 
 window.electronAPI.receive("scan-progress", (data) => {
     console.log("[Renderer] Got scan-progress:", data);
@@ -122,7 +129,7 @@ downloadBtn.addEventListener("click", () => {
     const total = items.length;
     const padWidth = String(total).length;
 
-    const manifest = [];
+    currentManifest = []; // reset before building new manifest
 
     items.forEach((link, i) => {
         const url = link.getAttribute("href");
@@ -154,8 +161,8 @@ downloadBtn.addEventListener("click", () => {
         }
         const savePath = `${folder}/${filename}`;
 
-        // Push to manifest
-        manifest.push({
+        // Push to global manifest
+        currentManifest.push({
             index,
             url,
             status: "pending",
@@ -165,9 +172,13 @@ downloadBtn.addEventListener("click", () => {
 
         // Update UI: replace link text with savePath
         link.textContent = savePath;
+
+        // ✅ Add data-index to the parent <li>
+        link.closest("li").setAttribute("data-index", index);
     });
 
-    console.log("[Renderer] Download manifest:", manifest);
+    console.log("[Renderer] Download manifest:", currentManifest);
+
 });
 
 
@@ -188,4 +199,13 @@ window.electronAPI.receive("options:load", (opt) => {
 window.electronAPI.receive("options:saved", (saved) => {
     console.log("[Renderer] Options saved:", saved);
     // Optional: add a UI confirmation here
+});
+
+window.electronAPI.receive("scan-complete", () => {
+    if (resultsList.children.length > 0) {
+        downloadBtn.style.display = "inline-block";
+        console.log("[Renderer] Scan complete — Download button enabled.");
+    } else {
+        console.log("[Renderer] Scan complete — no results found.");
+    }
 });

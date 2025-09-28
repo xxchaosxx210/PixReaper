@@ -76,25 +76,31 @@ ipcMain.on("scan-page", async (event, links) => {
     for (let i = 0; i < links.length; i += CONCURRENCY) {
         const batch = links.slice(i, i + CONCURRENCY);
 
-        await Promise.all(batch.map(async (link) => {
-            try {
-                const resolved = await resolveLink(link);
-                event.sender.send("scan-progress", {
-                    original: link,
-                    resolved,
-                    status: resolved ? "success" : "failed",
-                });
+        await Promise.all(
+            batch.map(async (link) => {
+                try {
+                    const resolved = await resolveLink(link);
+                    event.sender.send("scan-progress", {
+                        original: link,
+                        resolved,
+                        status: resolved ? "success" : "failed",
+                    });
 
-                logDebug("[Main] Resolved:", link, "->", resolved);
-            } catch (err) {
-                logError("[Main] Resolver error for:", link, err);
+                    logDebug("[Main] Resolved:", link, "->", resolved);
+                } catch (err) {
+                    logError("[Main] Resolver error for:", link, err);
 
-                event.sender.send("scan-progress", {
-                    original: link,
-                    resolved: null,
-                    status: "failed",
-                });
-            }
-        }));
+                    event.sender.send("scan-progress", {
+                        original: link,
+                        resolved: null,
+                        status: "failed",
+                    });
+                }
+            })
+        );
     }
+
+    // ✅ After all batches are processed, notify renderer
+    event.sender.send("scan-complete");
 });
+
