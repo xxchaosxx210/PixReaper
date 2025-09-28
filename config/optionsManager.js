@@ -5,6 +5,7 @@
 
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
 // Path to options.json (inside config folder)
 const optionsFilePath = path.join(__dirname, "options.json");
@@ -12,9 +13,11 @@ const optionsFilePath = path.join(__dirname, "options.json");
 // Default options (used if file missing/corrupted)
 const DEFAULT_OPTIONS = {
     prefix: "",
-    savePath: "",
+    savePath: path.join(os.homedir(), "Downloads", "PixReaper"),
     createSubfolder: true,
-    maxConnections: 10
+    maxConnections: 10,
+    indexing: "order",       // "order" or "none"
+    debugLogging: false      // toggle debug logging
 };
 
 /**
@@ -27,7 +30,22 @@ function loadOptions() {
             const raw = fs.readFileSync(optionsFilePath, "utf-8");
             const parsed = JSON.parse(raw);
 
-            return { ...DEFAULT_OPTIONS, ...parsed };
+            // Merge with defaults to ensure new keys are included
+            const merged = { ...DEFAULT_OPTIONS, ...parsed };
+
+            // Normalize savePath
+            if (!merged.savePath || typeof merged.savePath !== "string") {
+                merged.savePath = DEFAULT_OPTIONS.savePath;
+            } else {
+                merged.savePath = path.normalize(merged.savePath);
+            }
+
+            // Ensure maxConnections is valid
+            if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
+                merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
+            }
+
+            return merged;
         }
     } catch (err) {
         console.error("[OptionsManager] Failed to load options:", err);
@@ -45,9 +63,15 @@ function saveOptions(newOptions = {}) {
     const current = loadOptions();
     const merged = { ...current, ...newOptions };
 
-    // Basic validation
+    // Validation & normalization
     if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
         merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
+    }
+
+    if (!merged.savePath || typeof merged.savePath !== "string") {
+        merged.savePath = DEFAULT_OPTIONS.savePath;
+    } else {
+        merged.savePath = path.normalize(merged.savePath);
     }
 
     try {

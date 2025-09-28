@@ -41,8 +41,8 @@ let downloadCompleted = 0;
 
 // --- Status Bar Elements ---
 const statusText = document.getElementById("statusText");
-const imagesFoundText = document.getElementById("imageCount"); // fixed ID
-const progressBar = document.getElementById("progressBar");   // fixed ID
+const imagesFoundText = document.getElementById("imageCount");
+const progressBar = document.getElementById("progressBar");
 
 // --- Scan ---
 scanButton.addEventListener("click", async () => {
@@ -110,7 +110,9 @@ saveOptions.addEventListener("click", () => {
         prefix: document.getElementById("prefix").value.trim(),
         savePath: document.getElementById("savePath").value.trim(),
         createSubfolder: document.getElementById("subfolder").checked,
-        maxConnections: parseInt(document.getElementById("maxConnections").value, 10)
+        indexing: document.querySelector('input[name="indexing"]:checked').value,
+        maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
+        debugLogging: document.getElementById("debugLogging").checked
     };
     console.log("[Renderer] Saving options:", newOptions);
     window.electronAPI.send("options:save", newOptions);
@@ -195,6 +197,7 @@ downloadBtn.addEventListener("click", () => {
             createSubfolder: options.createSubfolder,
             indexing: options.indexing,
             maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
+            debugLogging: document.getElementById("debugLogging").checked
         }
     });
 });
@@ -205,9 +208,20 @@ window.electronAPI.receive("options:load", (opt) => {
     document.getElementById("prefix").value = opt.prefix ?? "";
     document.getElementById("savePath").value = opt.savePath ?? "";
     document.getElementById("subfolder").checked = !!opt.createSubfolder;
+
+    // indexing radios
+    const indexing = opt.indexing ?? "order";
+    document.querySelectorAll('input[name="indexing"]').forEach((radio) => {
+        radio.checked = radio.value === indexing;
+    });
+
+    // max connections
     const slider = document.getElementById("maxConnections");
     slider.value = opt.maxConnections ?? 10;
     maxConnectionsValue.textContent = slider.value;
+
+    // debug logging checkbox
+    document.getElementById("debugLogging").checked = !!opt.debugLogging;
 });
 
 window.electronAPI.receive("options:saved", (saved) => {

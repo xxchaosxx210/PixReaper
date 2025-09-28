@@ -1,13 +1,11 @@
 /* main.js */
 
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
 const { resolveLink } = require("./logic/hostResolver");
-const { logDebug, logError } = require("./utils/logger");
+const { logDebug, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
-const { dialog } = require("electron");
-
 
 let mainWindow;
 
@@ -28,6 +26,7 @@ function createWindow() {
     // When the renderer has loaded, send current options
     mainWindow.webContents.on("did-finish-load", () => {
         const currentOptions = optionsManager.loadOptions();
+        setDebug(!!currentOptions.debugLogging);
         mainWindow.webContents.send("options:load", currentOptions);
     });
 
@@ -47,15 +46,9 @@ app.whenReady().then(() => {
     // IPC: save options from renderer
     ipcMain.on("options:save", (event, newOptions) => {
         const saved = optionsManager.saveOptions(newOptions);
-
-        // Reply back with confirmation
+        setDebug(!!saved.debugLogging); // ✅ update logger
         event.sender.send("options:saved", saved);
-    });
-
-    app.on("activate", () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
+        mainWindow.webContents.send("options:load", saved); // push latest back to renderer
     });
 
     // IPC: start downloads
@@ -67,7 +60,6 @@ app.whenReady().then(() => {
                 manifest,
                 options,
                 (index, status, savePath) => {
-                    // Forward progress updates to renderer
                     event.sender.send("download:progress", {
                         index,
                         status,
@@ -77,15 +69,16 @@ app.whenReady().then(() => {
             );
 
             logDebug("[Main] All downloads finished.");
-            event.sender.send("download:complete"); // ✅ notify renderer when done
+            event.sender.send("download:complete");
         } catch (err) {
             logError("[Main] Download error:", err);
         }
     });
 
+    // IPC: folder picker
     ipcMain.on("choose-folder", async (event) => {
         const result = await dialog.showOpenDialog(mainWindow, {
-            properties: ["openDirectory", "createDirectory"]
+            properties: ["openDirectory", "createDirectory"],
         });
 
         if (!result.canceled && result.filePaths.length > 0) {
@@ -94,8 +87,6 @@ app.whenReady().then(() => {
             event.sender.send("choose-folder:result", null);
         }
     });
-
-
 });
 
 app.on("window-all-closed", () => {
@@ -128,11 +119,9 @@ ipcMain.on("scan-page", async (event, links) => {
                         resolved,
                         status: resolved ? "success" : "failed",
                     });
-
                     logDebug("[Main] Resolved:", link, "->", resolved);
                 } catch (err) {
                     logError("[Main] Resolver error for:", link, err);
-
                     event.sender.send("scan-progress", {
                         original: link,
                         resolved: null,
@@ -143,7 +132,5 @@ ipcMain.on("scan-page", async (event, links) => {
         );
     }
 
-    // ✅ After all batches are processed, notify renderer
     event.sender.send("scan-complete");
 });
-

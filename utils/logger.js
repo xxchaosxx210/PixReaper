@@ -1,5 +1,5 @@
 // utils/logger.js
-let DEBUG = true;
+let DEBUG = false; // default off, overridden by options
 
 function setDebug(enabled) {
     DEBUG = !!enabled;
@@ -11,11 +11,13 @@ function logDebug(...args) {
 }
 
 function logWarn(...args) {
-    if (DEBUG) console.warn("[WARN]", ...args);
+    // warnings should always show, regardless of debug
+    console.warn("[WARN]", ...args);
 }
 
 function logError(...args) {
-    if (DEBUG) console.error("[ERROR]", ...args);
+    // errors should always show, regardless of debug
+    console.error("[ERROR]", ...args);
 }
 
 module.exports = { setDebug, logDebug, logWarn, logError };

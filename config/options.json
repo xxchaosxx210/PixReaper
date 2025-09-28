@@ -1,6 +1,8 @@
 {
   "prefix": "",
-  "savePath": "C:\\Users\\chaos\\Downloads",
+  "savePath": "C:\\Users\\chaos\\Downloads\\",
   "createSubfolder": true,
-  "maxConnections": 18
+  "maxConnections": 18,
+  "indexing": "order",
+  "debugLogging": true
 }
