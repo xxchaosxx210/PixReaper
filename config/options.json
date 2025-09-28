@@ -1,6 +1,6 @@
 {
   "prefix": "",
   "savePath": "",
-  "createSubfolder": false,
+  "createSubfolder": true,
   "maxConnections": 18
 }

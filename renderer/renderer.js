@@ -32,6 +32,8 @@ scanButton.addEventListener("click", async () => {
     window.electronAPI.send("scan-page", viewerLinks);
 });
 
+
+
 // --- Results List ---
 const resultsList = document.getElementById("results");
 
@@ -90,6 +92,79 @@ saveOptions.addEventListener("click", () => {
 });
 
 // --- IPC: Options Load/Save ---
+
+// --- Download Manifest Preview ---
+const downloadBtn = document.getElementById("downloadBtn");
+
+// Helper: sanitize filenames (basic)
+function sanitizeFilename(name) {
+    return name.replace(/[<>:"/\\|?*]+/g, "_");
+}
+
+downloadBtn.addEventListener("click", () => {
+    console.log("[Renderer] Building download manifest...");
+
+    // Get current options (last loaded from main)
+    // For now, reuse values directly from the modal fields
+    const options = {
+        prefix: document.getElementById("prefix").value.trim(),
+        savePath: document.getElementById("savePath").value.trim(),
+        createSubfolder: document.getElementById("subfolder").checked,
+        indexing: document.querySelector('input[name="indexing"]:checked').value,
+    };
+
+    const items = resultsList.querySelectorAll("li a");
+    const total = items.length;
+    const padWidth = String(total).length;
+
+    const manifest = [];
+
+    items.forEach((link, i) => {
+        const url = link.getAttribute("href");
+        const index = i + 1;
+
+        // Get basename from URL
+        let base = url.split("/").pop().split("?")[0];
+        base = sanitizeFilename(base || "image");
+
+        // Ensure extension
+        if (!base.includes(".")) {
+            base += ".jpg";
+        }
+
+        // Build filename
+        let filename = "";
+        if (options.indexing === "order") {
+            const padded = String(index).padStart(padWidth, "0");
+            filename = `${options.prefix}${padded}_${base}`;
+        } else {
+            filename = `${options.prefix}${base}`;
+        }
+
+        // Build savePath
+        let folder = options.savePath;
+        if (options.createSubfolder) {
+            const sub = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+            folder = `${folder}/${sub}`;
+        }
+        const savePath = `${folder}/${filename}`;
+
+        // Push to manifest
+        manifest.push({
+            index,
+            url,
+            status: "pending",
+            filename,
+            savePath,
+        });
+
+        // Update UI: replace link text with savePath
+        link.textContent = savePath;
+    });
+
+    console.log("[Renderer] Download manifest:", manifest);
+});
+
 
 // Fill modal fields when options are loaded
 window.electronAPI.receive("options:load", (opt) => {
