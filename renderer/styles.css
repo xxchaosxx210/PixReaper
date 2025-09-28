@@ -46,6 +46,7 @@ body {
 }
 
 /* Bottom panel (Results) */
+
 #bottom-panel {
     height: 200px;
     overflow-y: auto;
@@ -67,15 +68,14 @@ body {
     font-size: 0.9em;
 }
 
-#results li.success {
-    background: #e6ffed;
-    color: #22863a;
+#results li.success,
+#results li.failed {
+    background: transparent;
+    /* remove green/red backgrounds */
+    color: inherit;
+    /* keep normal text/link colors */
 }
 
-#results li.failed {
-    background: #ffeef0;
-    color: #d73a49;
-}
 
 /* ========== Modal Styles ========== */
 
