@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("path");
 const { resolveLink } = require("./logic/hostResolver");
 const { logDebug, logError } = require("./utils/logger");
+const optionsManager = require("./config/optionsManager");
+
 
 let mainWindow;
 
@@ -19,6 +21,12 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 
+    // When the renderer has loaded, send current options
+    mainWindow.webContents.on("did-finish-load", () => {
+        const currentOptions = optionsManager.loadOptions();
+        mainWindow.webContents.send("options:load", currentOptions);
+    });
+
     // Debug: catch load errors
     mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
         console.error("[Main] did-fail-load:", code, desc, url);
@@ -29,7 +37,23 @@ function createWindow() {
     });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+    createWindow();
+
+    // IPC: save options from renderer
+    ipcMain.on("options:save", (event, newOptions) => {
+        const saved = optionsManager.saveOptions(newOptions);
+
+        // Reply back with confirmation
+        event.sender.send("options:saved", saved);
+    });
+
+    app.on("activate", () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+        }
+    });
+});
 
 app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {

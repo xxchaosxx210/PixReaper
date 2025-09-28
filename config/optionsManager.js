@@ -17,35 +17,53 @@ const DEFAULT_OPTIONS = {
     maxConnections: 10
 };
 
-// --- Public API ---
-
 /**
- * loadOptions()
- * - Reads options.json from disk.
- * - If missing/corrupted, falls back to DEFAULT_OPTIONS.
- * - Returns merged options object.
+ * Safely load options from disk.
+ * Falls back to DEFAULT_OPTIONS if file is missing or invalid.
  */
 function loadOptions() {
-    // implementation goes here
+    try {
+        if (fs.existsSync(optionsFilePath)) {
+            const raw = fs.readFileSync(optionsFilePath, "utf-8");
+            const parsed = JSON.parse(raw);
+
+            return { ...DEFAULT_OPTIONS, ...parsed };
+        }
+    } catch (err) {
+        console.error("[OptionsManager] Failed to load options:", err);
+    }
+
+    // fallback
+    return { ...DEFAULT_OPTIONS };
 }
 
 /**
- * saveOptions(newOptions)
- * - Validates values (types, ranges).
- * - Merges with existing options.
- * - Writes back to options.json.
- * - Returns final saved options.
+ * Save options to disk, merging with defaults.
+ * Returns the final saved object.
  */
-function saveOptions(newOptions) {
-    // implementation goes here
+function saveOptions(newOptions = {}) {
+    const current = loadOptions();
+    const merged = { ...current, ...newOptions };
+
+    // Basic validation
+    if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
+        merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
+    }
+
+    try {
+        fs.writeFileSync(optionsFilePath, JSON.stringify(merged, null, 2), "utf-8");
+    } catch (err) {
+        console.error("[OptionsManager] Failed to save options:", err);
+    }
+
+    return merged;
 }
 
 /**
- * getDefaultOptions()
- * - Returns a clone of DEFAULT_OPTIONS.
+ * Get a copy of default options.
  */
 function getDefaultOptions() {
-    // implementation goes here
+    return { ...DEFAULT_OPTIONS };
 }
 
 module.exports = {

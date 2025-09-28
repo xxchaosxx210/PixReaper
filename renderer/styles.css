@@ -1,4 +1,4 @@
-/* ========== Layout ========== */
+/* General layout */
 body {
     margin: 0;
     font-family: Arial, sans-serif;
@@ -7,30 +7,28 @@ body {
     height: 100vh;
 }
 
-/* Top panel with navigation + browser */
 #top-panel {
     flex: 1;
     display: flex;
     flex-direction: column;
+    border-bottom: 2px solid #ccc;
 }
 
 #nav-bar {
     display: flex;
-    padding: 5px;
-    background: #f0f0f0;
-    border-bottom: 1px solid #ccc;
+    padding: 4px;
+    background: #f4f4f4;
+    border-bottom: 1px solid #ddd;
 }
 
-#nav-bar input {
+#nav-bar input[type="text"] {
     flex: 1;
-    padding: 5px;
-    margin-right: 5px;
+    padding: 4px;
+    margin-right: 4px;
 }
 
 #nav-bar button {
-    margin-left: 5px;
-    padding: 5px 10px;
-    cursor: pointer;
+    margin-left: 4px;
 }
 
 #browserView {
@@ -38,19 +36,15 @@ body {
     border: none;
 }
 
-/* Splitter */
 #splitter {
-    height: 5px;
+    height: 6px;
     background: #ccc;
     cursor: row-resize;
 }
 
-/* Bottom panel (Results) */
-
 #bottom-panel {
-    height: 200px;
+    flex: 1;
     overflow-y: auto;
-    border-top: 1px solid #ccc;
     padding: 10px;
     background: #fafafa;
 }
@@ -62,29 +56,47 @@ body {
 }
 
 #results li {
-    margin: 4px 0;
-    padding: 3px 6px;
-    border-radius: 4px;
-    font-size: 0.9em;
+    padding: 4px 0;
+    font-size: 14px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
 }
 
-#results li.success,
-#results li.failed {
-    background: transparent;
-    /* remove green/red backgrounds */
-    color: inherit;
-    /* keep normal text/link colors */
+#results li a {
+    color: #007acc;
+    text-decoration: none;
+    word-break: break-all;
 }
 
+#results li a:hover {
+    text-decoration: underline;
+}
 
-/* ========== Modal Styles ========== */
+/* --- Status icons --- */
+.status-icon {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 8px;
+    border-radius: 50%;
+}
 
-/* Modal backdrop */
+.status-icon.success {
+    background-color: #4caf50;
+    /* green */
+}
+
+.status-icon.failed {
+    background-color: #f44336;
+    /* red */
+}
+
+/* --- Modal --- */
 .modal {
     display: none;
-    /* Hidden by default */
     position: fixed;
-    z-index: 1000;
+    z-index: 999;
     left: 0;
     top: 0;
     width: 100%;
@@ -93,56 +105,38 @@ body {
     background-color: rgba(0, 0, 0, 0.5);
 }
 
-/* Modal content box */
 .modal-content {
     background-color: #fff;
     margin: 10% auto;
     padding: 20px;
-    border-radius: 8px;
+    border: 1px solid #888;
     width: 400px;
-    max-width: 90%;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
 }
 
-/* Modal form elements */
+.modal-content h2 {
+    margin-top: 0;
+}
+
 .modal-content label {
     display: block;
-    margin-top: 10px;
-    font-weight: bold;
+    margin: 10px 0 4px;
 }
 
 .modal-content input[type="text"],
+.modal-content input[type="number"],
 .modal-content input[type="range"] {
     width: 100%;
-    margin-top: 5px;
+    padding: 4px;
     margin-bottom: 10px;
-    padding: 5px;
     box-sizing: border-box;
 }
 
-/* Row layout for Save Path + Browse */
-.modal-content .row {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.modal-content .row input[type="text"] {
-    flex: 1;
-}
-
-.modal-content .row button {
-    white-space: nowrap;
-}
-
-/* Modal buttons */
 .modal-buttons {
     text-align: right;
-    margin-top: 15px;
+    margin-top: 10px;
 }
 
 .modal-buttons button {
-    margin-left: 10px;
-    padding: 5px 12px;
-    cursor: pointer;
+    margin-left: 6px;
 }

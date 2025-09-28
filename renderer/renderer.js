@@ -1,133 +1,109 @@
-// renderer/renderer.js
+// renderer.js
+// Handles UI interactions and IPC for PixReaper
 
-// ======================================================
-// 🌐 Webview Navigation
-// ======================================================
+// --- Webview Controls ---
 const webview = document.getElementById("browserView");
 const urlInput = document.getElementById("urlInput");
-const goBtn = document.getElementById("goBtn");
-const scanBtn = document.getElementById("scanBtn");
-const resultsList = document.getElementById("results");
+const goButton = document.getElementById("goBtn");
+const scanButton = document.getElementById("scanBtn");
 
-// Navigate to typed URL
-goBtn.addEventListener("click", () => {
-    const url = urlInput.value.trim();
-    if (url) {
-        if (!/^https?:\/\//i.test(url)) {
-            webview.src = "http://" + url;
-        } else {
-            webview.src = url;
-        }
+goButton.addEventListener("click", () => {
+    let url = urlInput.value.trim();
+    if (!/^https?:\/\//i.test(url)) {
+        url = "https://" + url;
     }
+    webview.loadURL(url);
 });
 
-// Allow pressing Enter in the address bar
-urlInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-        goBtn.click();
-    }
+// Update address bar when webview navigates
+webview.addEventListener("did-navigate", (event) => {
+    urlInput.value = event.url;
 });
 
-// --- Scan Page ---
-scanBtn.addEventListener("click", async () => {
-    console.log("[Renderer] Scan Page clicked");
-
+// Request scan of current webview page
+scanButton.addEventListener("click", async () => {
     const viewerLinks = await webview.executeJavaScript(`
-        Array.from(document.querySelectorAll("a[href] img"))
-            .map(img => img.parentElement.href)
-            .filter(href => href && href.match(/(imagebam|imgbox|pixhost|imagevenue|pimpandhost|postimg|turboimagehost|fastpic|imagetwist|imgview|radikal|imageupper)/i))
-    `);
+    Array.from(document.querySelectorAll("a[href]"))
+      .map(a => a.href)
+      .filter(href => href && href.match(/(imagebam|imgbox|pixhost|imagevenue|pimpandhost)/i))
+  `);
 
-    console.log("[Renderer] Found candidate viewer links:", viewerLinks.length);
-
-    // Clear old results
-    resultsList.innerHTML = "";
-
-    // Send links to main process for resolving
+    console.log("[Renderer] Found links in page:", viewerLinks.length);
     window.electronAPI.send("scan-page", viewerLinks);
 });
 
-// --- Listen for resolved results from main process ---
+// --- Results List ---
+const resultsList = document.getElementById("results");
+
 window.electronAPI.receive("scan-progress", (data) => {
+    console.log("[Renderer] Got scan-progress:", data);
+
     const li = document.createElement("li");
-
-    if (data.status === "success" && data.resolved) {
-        li.innerHTML = `
-            ✅ <a href="${data.resolved}" target="_blank">${data.resolved}</a>
-        `;
-        li.className = "success";
-    } else if (data.status === "failed") {
-        li.innerHTML = `
-            ⚠️ Failed to resolve 
-            <a href="${data.original}" target="_blank">${data.original}</a>
-        `;
-        li.className = "failed";
-    } else {
-        li.innerHTML = `⏳ ${data.original}`;
-        li.className = "pending";
-    }
-
+    li.className = data.status;
+    li.innerHTML = `
+    <span class="status-icon ${data.status}"></span>
+    <a href="${data.resolved || data.original}" target="_blank">
+      ${data.resolved || data.original}
+    </a>
+  `;
     resultsList.appendChild(li);
 });
 
-// ======================================================
-// ⚙️ Options Modal Logic
-// ======================================================
-
-const optionsBtn = document.getElementById("optionsBtn");
+// --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
+const optionsButton = document.getElementById("optionsBtn");
 const cancelOptions = document.getElementById("cancelOptions");
 const saveOptions = document.getElementById("saveOptions");
-
-// Inputs inside modal
-const savePathInput = document.getElementById("savePath");
-const prefixInput = document.getElementById("prefix");
-const indexingRadios = document.getElementsByName("indexing");
-const subfolderCheckbox = document.getElementById("subfolder");
-const maxConnectionsSlider = document.getElementById("maxConnections");
+const maxConnections = document.getElementById("maxConnections");
 const maxConnectionsValue = document.getElementById("maxConnectionsValue");
-const debugLoggingCheckbox = document.getElementById("debugLogging");
 
-// --- Open modal
-optionsBtn.addEventListener("click", () => {
-    console.log("[Renderer] Options button clicked");
+// Open modal
+optionsButton.addEventListener("click", () => {
     optionsModal.style.display = "block";
 });
 
-// --- Cancel button
+// Close modal without saving
 cancelOptions.addEventListener("click", () => {
     optionsModal.style.display = "none";
 });
 
-// --- Save button (for now just logs values)
-saveOptions.addEventListener("click", () => {
-    const indexingMode = Array.from(indexingRadios).find(r => r.checked).value;
+// Slider live update
+maxConnections.addEventListener("input", () => {
+    maxConnectionsValue.textContent = maxConnections.value;
+});
 
-    const options = {
-        savePath: savePathInput.value.trim(),
-        prefix: prefixInput.value.trim(),
-        indexing: indexingMode,
-        subfolder: subfolderCheckbox.checked,
-        maxConnections: parseInt(maxConnectionsSlider.value, 10),
-        debugLogging: debugLoggingCheckbox.checked
+// Save options
+saveOptions.addEventListener("click", () => {
+    const newOptions = {
+        prefix: document.getElementById("prefix").value.trim(),
+        savePath: document.getElementById("savePath").value.trim(),
+        createSubfolder: document.getElementById("subfolder").checked,
+        maxConnections: parseInt(document.getElementById("maxConnections").value, 10)
     };
 
-    console.log("[Renderer] Options saved:", options);
+    console.log("[Renderer] Saving options:", newOptions);
+    window.electronAPI.send("options:save", newOptions);
 
-    // Later: send to main process via IPC
-    // window.electronAPI.send("save-options", options);
-
-    optionsModal.style.display = "none";
+    optionsModal.style.display = "none"; // close modal after save
 });
 
-// --- Update slider label live
-maxConnectionsSlider.addEventListener("input", () => {
-    maxConnectionsValue.textContent = maxConnectionsSlider.value;
+// --- IPC: Options Load/Save ---
+
+// Fill modal fields when options are loaded
+window.electronAPI.receive("options:load", (opt) => {
+    console.log("[Renderer] Loaded options:", opt);
+
+    document.getElementById("prefix").value = opt.prefix ?? "";
+    document.getElementById("savePath").value = opt.savePath ?? "";
+    document.getElementById("subfolder").checked = !!opt.createSubfolder;
+
+    const slider = document.getElementById("maxConnections");
+    slider.value = opt.maxConnections ?? 10;
+    maxConnectionsValue.textContent = slider.value;
 });
 
-// --- Close modal when clicking outside of content
-window.addEventListener("click", (e) => {
-    if (e.target === optionsModal) {
-        optionsModal.style.display = "none";
-    }
+// Confirm when options are saved
+window.electronAPI.receive("options:saved", (saved) => {
+    console.log("[Renderer] Options saved:", saved);
+    // Optional: add a UI confirmation here
 });
