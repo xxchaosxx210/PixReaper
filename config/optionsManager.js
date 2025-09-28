@@ -14,7 +14,7 @@ const optionsFilePath = path.join(__dirname, "options.json");
 const DEFAULT_OPTIONS = {
     prefix: "",
     savePath: path.join(os.homedir(), "Downloads", "PixReaper"),
-    createSubfolder: true,
+    createSubfolder: true,   // if true: try to use page URL slug, else fallback to timestamp
     maxConnections: 10,
     indexing: "order",       // "order" or "none"
     debugLogging: false      // toggle debug logging
@@ -30,17 +30,14 @@ function loadOptions() {
             const raw = fs.readFileSync(optionsFilePath, "utf-8");
             const parsed = JSON.parse(raw);
 
-            // Merge with defaults to ensure new keys are included
             const merged = { ...DEFAULT_OPTIONS, ...parsed };
 
-            // Normalize savePath
             if (!merged.savePath || typeof merged.savePath !== "string") {
                 merged.savePath = DEFAULT_OPTIONS.savePath;
             } else {
                 merged.savePath = path.normalize(merged.savePath);
             }
 
-            // Ensure maxConnections is valid
             if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
                 merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
             }
@@ -51,7 +48,6 @@ function loadOptions() {
         console.error("[OptionsManager] Failed to load options:", err);
     }
 
-    // fallback
     return { ...DEFAULT_OPTIONS };
 }
 
@@ -63,7 +59,6 @@ function saveOptions(newOptions = {}) {
     const current = loadOptions();
     const merged = { ...current, ...newOptions };
 
-    // Validation & normalization
     if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
         merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
     }
@@ -83,9 +78,6 @@ function saveOptions(newOptions = {}) {
     return merged;
 }
 
-/**
- * Get a copy of default options.
- */
 function getDefaultOptions() {
     return { ...DEFAULT_OPTIONS };
 }

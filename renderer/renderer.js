@@ -126,7 +126,20 @@ function sanitizeFilename(name) {
     return name.replace(/[<>:"/\\|?*]+/g, "_");
 }
 
-downloadBtn.addEventListener("click", () => {
+function deriveSlugFromUrl(url) {
+    try {
+        const u = new URL(url);
+        let slug = u.pathname.split("/").filter(Boolean).pop();
+        if (!slug || slug.length < 2) {
+            slug = u.hostname.replace(/^www\./, "");
+        }
+        return sanitizeFilename(slug);
+    } catch {
+        return null;
+    }
+}
+
+downloadBtn.addEventListener("click", async () => {
     console.log("[Renderer] Building download manifest...");
     downloadBtn.style.display = "none";
 
@@ -147,6 +160,16 @@ downloadBtn.addEventListener("click", () => {
 
     currentManifest = [];
 
+    let folder = options.savePath;
+    if (options.createSubfolder) {
+        const currentUrl = await webview.getURL();
+        let slug = deriveSlugFromUrl(currentUrl);
+        if (!slug) {
+            slug = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+        }
+        folder = `${folder}/${slug}`;
+    }
+
     items.forEach((link, i) => {
         const url = link.getAttribute("href");
         const index = i + 1;
@@ -166,11 +189,6 @@ downloadBtn.addEventListener("click", () => {
             filename = `${options.prefix}${base}`;
         }
 
-        let folder = options.savePath;
-        if (options.createSubfolder) {
-            const sub = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-            folder = `${folder}/${sub}`;
-        }
         const savePath = `${folder}/${filename}`;
 
         currentManifest.push({
@@ -192,11 +210,7 @@ downloadBtn.addEventListener("click", () => {
     window.electronAPI.send("download:start", {
         manifest: currentManifest,
         options: {
-            prefix: options.prefix,
-            savePath: options.savePath,
-            createSubfolder: options.createSubfolder,
-            indexing: options.indexing,
-            maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
+            ...options,
             debugLogging: document.getElementById("debugLogging").checked
         }
     });
@@ -209,18 +223,15 @@ window.electronAPI.receive("options:load", (opt) => {
     document.getElementById("savePath").value = opt.savePath ?? "";
     document.getElementById("subfolder").checked = !!opt.createSubfolder;
 
-    // indexing radios
     const indexing = opt.indexing ?? "order";
     document.querySelectorAll('input[name="indexing"]').forEach((radio) => {
         radio.checked = radio.value === indexing;
     });
 
-    // max connections
     const slider = document.getElementById("maxConnections");
     slider.value = opt.maxConnections ?? 10;
     maxConnectionsValue.textContent = slider.value;
 
-    // debug logging checkbox
     document.getElementById("debugLogging").checked = !!opt.debugLogging;
 });
 
