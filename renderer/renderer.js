@@ -44,8 +44,11 @@ let currentManifest = [];
 window.electronAPI.receive("scan-progress", (data) => {
     console.log("[Renderer] Got scan-progress:", data);
 
+    const index = resultsList.children.length + 1;
     const li = document.createElement("li");
     li.className = "pending";
+    li.setAttribute("data-index", index);
+
     li.innerHTML = `
         <span class="status-icon pending"></span>
         <a href="${data.resolved || data.original}" target="_blank">
@@ -54,7 +57,6 @@ window.electronAPI.receive("scan-progress", (data) => {
     `;
     resultsList.appendChild(li);
 
-    // Show the Download button if it’s still hidden
     if (resultsList.children.length === 1) {
         downloadBtn.style.display = "inline-block";
     }
@@ -108,10 +110,9 @@ function sanitizeFilename(name) {
 
 downloadBtn.addEventListener("click", () => {
     console.log("[Renderer] Building download manifest...");
-    // Hide the button once download starts
     downloadBtn.style.display = "none";
 
-    // Get current options (last loaded from main)
+    // Get current options
     const options = {
         prefix: document.getElementById("prefix").value.trim(),
         savePath: document.getElementById("savePath").value.trim(),
@@ -119,26 +120,28 @@ downloadBtn.addEventListener("click", () => {
         indexing: document.querySelector('input[name="indexing"]:checked').value,
     };
 
+    // ✅ Default save path if empty
+    if (!options.savePath) {
+        options.savePath = "PixReaper"; // will be resolved into Downloads/PixReaper
+    }
+
     const items = resultsList.querySelectorAll("li a");
     const total = items.length;
     const padWidth = String(total).length;
 
-    currentManifest = []; // reset before building new manifest
+    currentManifest = [];
 
     items.forEach((link, i) => {
         const url = link.getAttribute("href");
         const index = i + 1;
 
-        // Get basename from URL
         let base = url.split("/").pop().split("?")[0];
         base = sanitizeFilename(base || "image");
 
-        // Ensure extension
         if (!base.includes(".")) {
             base += ".jpg";
         }
 
-        // Build filename
         let filename = "";
         if (options.indexing === "order") {
             const padded = String(index).padStart(padWidth, "0");
@@ -147,7 +150,6 @@ downloadBtn.addEventListener("click", () => {
             filename = `${options.prefix}${base}`;
         }
 
-        // Build savePath (main will normalize to Windows form)
         let folder = options.savePath;
         if (options.createSubfolder) {
             const sub = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
@@ -155,7 +157,6 @@ downloadBtn.addEventListener("click", () => {
         }
         const savePath = `${folder}/${filename}`;
 
-        // Push to global manifest
         currentManifest.push({
             index,
             url,
@@ -164,11 +165,9 @@ downloadBtn.addEventListener("click", () => {
             savePath,
         });
 
-        // ✅ Add data-index to the parent <li>
         link.closest("li").setAttribute("data-index", index);
     });
 
-    // Send manifest + options to main for downloading
     window.electronAPI.send("download:start", {
         manifest: currentManifest,
         options: {
@@ -196,9 +195,9 @@ window.electronAPI.receive("options:load", (opt) => {
 
 window.electronAPI.receive("options:saved", (saved) => {
     console.log("[Renderer] Options saved:", saved);
-    // Optional: add a UI confirmation here
 });
 
+// --- IPC: Scan Complete ---
 window.electronAPI.receive("scan-complete", () => {
     if (resultsList.children.length > 0) {
         downloadBtn.style.display = "inline-block";
@@ -214,29 +213,28 @@ window.electronAPI.receive("download:progress", (data) => {
 
     const { index, status, savePath } = data;
 
-    // Update manifest entry
     const entry = currentManifest.find((e) => e.index === index);
     if (entry) {
         entry.status = status;
-        entry.savePath = savePath; // ✅ normalized path from main
+        entry.savePath = savePath;
     }
 
-    // Update UI: find the correct <li> via data-index
     const li = resultsList.querySelector(`li[data-index="${index}"]`);
     if (li) {
         const icon = li.querySelector(".status-icon");
         if (icon) {
             icon.className = `status-icon ${status}`;
         }
-        // ✅ Update link text to normalized savePath
         const link = li.querySelector("a");
         if (link) {
+            const fileUrl = "file:///" + savePath.replace(/\\/g, "/");
             link.textContent = savePath;
+            link.setAttribute("href", fileUrl);
+            link.setAttribute("target", "_blank");
         }
     }
 });
 
 window.electronAPI.receive("download:complete", () => {
     console.log("[Renderer] All downloads complete.");
-    // Optional: show a toast or re-enable Download button
 });

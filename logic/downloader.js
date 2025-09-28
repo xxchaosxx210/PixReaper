@@ -7,6 +7,7 @@ const { pipeline } = require("stream");
 const { promisify } = require("util");
 const https = require("https");
 const http = require("http");
+const { app } = require("electron"); // ✅ so we can get default Downloads path
 
 const streamPipeline = promisify(pipeline);
 
@@ -14,10 +15,14 @@ const streamPipeline = promisify(pipeline);
  * Download a single file from URL to savePath
  */
 async function downloadFile(url, savePath) {
-    // ✅ Normalize path for Windows/macOS/Linux
-    const safePath = path.normalize(savePath);
+    // ✅ Ensure absolute path
+    let absolutePath = path.isAbsolute(savePath)
+        ? savePath
+        : path.join(app.getPath("downloads"), savePath);
 
-    await fs.promises.mkdir(path.dirname(safePath), { recursive: true });
+    absolutePath = path.normalize(absolutePath);
+
+    await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
 
     return new Promise((resolve, reject) => {
         const client = url.startsWith("https") ? https : http;
@@ -29,9 +34,9 @@ async function downloadFile(url, savePath) {
                     return;
                 }
 
-                const fileStream = fs.createWriteStream(safePath);
+                const fileStream = fs.createWriteStream(absolutePath);
                 streamPipeline(res, fileStream)
-                    .then(() => resolve(true))
+                    .then(() => resolve(absolutePath)) // ✅ resolve with real path
                     .catch(reject);
             })
             .on("error", reject);
@@ -49,30 +54,29 @@ async function startDownload(manifest, options, onProgress) {
 
     return new Promise((resolve) => {
         function next() {
-            // All items processed?
             if (index >= manifest.length && active === 0) {
                 resolve();
                 return;
             }
 
-            // Fill up concurrency slots
             while (active < maxConnections && index < manifest.length) {
                 const item = manifest[index++];
                 active++;
 
                 downloadFile(item.url, item.savePath)
-                    .then(() => {
+                    .then((absolutePath) => {
                         item.status = "success";
-                        onProgress(item.index, "success", path.normalize(item.savePath));
+                        item.savePath = absolutePath; // ✅ store normalized absolute path
+                        onProgress(item.index, "success", absolutePath);
                     })
                     .catch((err) => {
                         console.error("[Downloader] Failed:", item.url, err.message);
                         item.status = "failed";
-                        onProgress(item.index, "failed", path.normalize(item.savePath));
+                        onProgress(item.index, "failed", item.savePath);
                     })
                     .finally(() => {
                         active--;
-                        next(); // launch next task
+                        next();
                     });
             }
         }
