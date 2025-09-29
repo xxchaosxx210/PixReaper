@@ -4,5 +4,9 @@
   "createSubfolder": true,
   "maxConnections": 18,
   "indexing": "order",
-  "debugLogging": true
+  "debugLogging": true,
+  "validExtensions": [
+    "jpg",
+    "jpeg"
+  ]
 }
