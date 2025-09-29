@@ -43,12 +43,15 @@ let downloadCompleted = 0;
 const statusText = document.getElementById("statusText");
 const imagesFoundText = document.getElementById("imageCount");
 const progressBar = document.getElementById("progressBar");
+const downloadBtn = document.getElementById("downloadBtn");
+const cancelBtn = document.getElementById("cancelBtn"); // ✅ new cancel button
 
 // --- Scan ---
 scanButton.addEventListener("click", async () => {
     resultsList.innerHTML = "";
     currentManifest = [];
     downloadBtn.style.display = "none";
+    cancelBtn.style.display = "inline-block"; // ✅ show cancel during scan
     imagesFound = 0;
     imagesFoundText.textContent = "Images found: 0";
     statusText.textContent = "Status: Scanning...";
@@ -88,6 +91,18 @@ window.electronAPI.receive("scan-progress", (data) => {
     }
 });
 
+// --- Cancel Button Logic ---
+cancelBtn.addEventListener("click", () => {
+    console.log("[Renderer] Cancel requested.");
+    if (statusText.textContent.includes("Scanning")) {
+        window.electronAPI.send("scan:cancel");
+    } else if (statusText.textContent.includes("Downloading")) {
+        window.electronAPI.send("download:cancel");
+    }
+    statusText.textContent = "Status: Cancelling...";
+    cancelBtn.disabled = true; // ✅ disable until reset
+});
+
 // --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
 const optionsButton = document.getElementById("optionsBtn");
@@ -120,8 +135,6 @@ saveOptions.addEventListener("click", () => {
 });
 
 // --- Download Manifest ---
-const downloadBtn = document.getElementById("downloadBtn");
-
 function sanitizeFilename(name) {
     return name.replace(/[<>:"/\\|?*]+/g, "_");
 }
@@ -142,6 +155,7 @@ function deriveSlugFromUrl(url) {
 downloadBtn.addEventListener("click", async () => {
     console.log("[Renderer] Building download manifest...");
     downloadBtn.style.display = "none";
+    cancelBtn.style.display = "inline-block"; // ✅ show cancel during download
 
     const options = {
         prefix: document.getElementById("prefix").value.trim(),
@@ -241,6 +255,8 @@ window.electronAPI.receive("options:saved", (saved) => {
 
 // --- IPC: Scan Complete ---
 window.electronAPI.receive("scan-complete", () => {
+    cancelBtn.style.display = "none"; // ✅ hide cancel after scan
+    cancelBtn.disabled = false;
     if (resultsList.children.length > 0) {
         downloadBtn.style.display = "inline-block";
         statusText.textContent = "Status: Scan complete. Ready to download.";
@@ -249,7 +265,6 @@ window.electronAPI.receive("scan-complete", () => {
     }
 });
 
-// --- IPC: Download Progress ---
 // --- IPC: Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
     downloadCompleted = currentManifest.filter((e) => e.status === "success").length;
@@ -287,8 +302,11 @@ window.electronAPI.receive("download:progress", (data) => {
     }
 });
 
+// --- IPC: Download Complete ---
 window.electronAPI.receive("download:complete", () => {
     console.log("[Renderer] All downloads complete.");
+    cancelBtn.style.display = "none"; // ✅ hide cancel after download
+    cancelBtn.disabled = false;
     statusText.textContent = "Status: All downloads complete.";
     progressBar.style.width = "100%";
 });

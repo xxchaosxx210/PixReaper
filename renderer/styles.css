@@ -241,3 +241,25 @@ body {
 .modal-buttons button {
     margin-left: 6px;
 }
+
+/* --- Cancel Button --- */
+#cancelBtn.cancel {
+    padding: 4px 10px;
+    font-size: 14px;
+    background-color: #d9534f;
+    /* red */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-left: 6px;
+}
+
+#cancelBtn.cancel:hover {
+    background-color: #c9302c;
+}
+
+#cancelBtn.cancel:disabled {
+    background-color: #aaa;
+    cursor: default;
+}

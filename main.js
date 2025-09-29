@@ -8,6 +8,8 @@ const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
 
 let mainWindow;
+let cancelScan = false;
+let cancelDownload = false;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -54,25 +56,41 @@ app.whenReady().then(() => {
     // IPC: start downloads
     ipcMain.on("download:start", async (event, { manifest, options }) => {
         logDebug("[Main] Starting downloads:", manifest.length, "files");
+        cancelDownload = false;
 
         try {
             await downloader.startDownload(
                 manifest,
                 options,
                 (index, status, savePath) => {
+                    if (cancelDownload) {
+                        logDebug("[Main] Download cancelled.");
+                        event.sender.send("download:complete");
+                        return;
+                    }
+
                     event.sender.send("download:progress", {
                         index,
                         status,
                         savePath,
                     });
-                }
+                },
+                () => cancelDownload // ✅ pass cancel flag callback
             );
 
-            logDebug("[Main] All downloads finished.");
-            event.sender.send("download:complete");
+            if (!cancelDownload) {
+                logDebug("[Main] All downloads finished.");
+                event.sender.send("download:complete");
+            }
         } catch (err) {
             logError("[Main] Download error:", err);
         }
+    });
+
+    // IPC: cancel download
+    ipcMain.on("download:cancel", (event) => {
+        logDebug("[Main] Cancelling downloads...");
+        cancelDownload = true;
     });
 
     // IPC: folder picker
@@ -106,31 +124,51 @@ const CONCURRENCY = 8;
 
 ipcMain.on("scan-page", async (event, links) => {
     logDebug("[Main] Received links:", links.length);
+    cancelScan = false;
 
     for (let i = 0; i < links.length; i += CONCURRENCY) {
+        if (cancelScan) {
+            logDebug("[Main] Scan cancelled.");
+            event.sender.send("scan-complete");
+            return;
+        }
+
         const batch = links.slice(i, i + CONCURRENCY);
 
         await Promise.all(
             batch.map(async (link) => {
+                if (cancelScan) return;
                 try {
                     const resolved = await resolveLink(link);
-                    event.sender.send("scan-progress", {
-                        original: link,
-                        resolved,
-                        status: resolved ? "success" : "failed",
-                    });
-                    logDebug("[Main] Resolved:", link, "->", resolved);
+                    if (!cancelScan) {
+                        event.sender.send("scan-progress", {
+                            original: link,
+                            resolved,
+                            status: resolved ? "success" : "failed",
+                        });
+                        logDebug("[Main] Resolved:", link, "->", resolved);
+                    }
                 } catch (err) {
                     logError("[Main] Resolver error for:", link, err);
-                    event.sender.send("scan-progress", {
-                        original: link,
-                        resolved: null,
-                        status: "failed",
-                    });
+                    if (!cancelScan) {
+                        event.sender.send("scan-progress", {
+                            original: link,
+                            resolved: null,
+                            status: "failed",
+                        });
+                    }
                 }
             })
         );
     }
 
-    event.sender.send("scan-complete");
+    if (!cancelScan) {
+        event.sender.send("scan-complete");
+    }
+});
+
+// IPC: cancel scan
+ipcMain.on("scan:cancel", (event) => {
+    logDebug("[Main] Cancelling scan...");
+    cancelScan = true;
 });

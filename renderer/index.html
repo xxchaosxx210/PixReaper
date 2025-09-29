@@ -26,13 +26,17 @@
     <div id="status-bar">
         <span id="statusText">Status: Ready</span>
         <span id="imageCount">Images found: 0</span>
-        <button id="downloadBtn" style="display:none;">⬇ Download</button>
+        <div class="status-buttons">
+            <button id="downloadBtn" style="display:none;">⬇ Download</button>
+            <button id="cancelBtn" style="display:none;" class="cancel">✖ Cancel</button>
+        </div>
     </div>
 
     <!-- ✅ Progress Bar -->
     <div id="progressContainer">
         <div id="progressBar"></div>
     </div>
+
 
     <div id="bottom-panel">
         <ul id="results"></ul>

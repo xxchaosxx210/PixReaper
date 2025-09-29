@@ -1,5 +1,5 @@
 // logic/downloader.js
-// Handles downloading files with concurrency control + retry logic
+// Handles downloading files with concurrency control + retry logic + cancel support
 
 const fs = require("fs");
 const path = require("path");
@@ -49,18 +49,37 @@ async function downloadFile(url, savePath) {
 /**
  * Attempt a download with retry logic
  */
-async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES) {
+async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, isCancelled) {
     let attempt = 0;
 
     while (attempt <= maxRetries) {
+        if (isCancelled && isCancelled()) {
+            console.warn(`[Downloader] Cancelled before starting: ${item.url}`);
+            item.status = "cancelled";
+            onProgress(item.index, "cancelled", item.savePath);
+            return;
+        }
+
         try {
             const absolutePath = await downloadFile(item.url, item.savePath);
+            if (isCancelled && isCancelled()) {
+                console.warn(`[Downloader] Cancelled mid-download: ${item.url}`);
+                item.status = "cancelled";
+                onProgress(item.index, "cancelled", item.savePath);
+                return;
+            }
             item.status = "success";
             item.savePath = absolutePath;
             onProgress(item.index, "success", absolutePath);
             return;
         } catch (err) {
             attempt++;
+            if (isCancelled && isCancelled()) {
+                console.warn(`[Downloader] Cancelled during retry: ${item.url}`);
+                item.status = "cancelled";
+                onProgress(item.index, "cancelled", item.savePath);
+                return;
+            }
             if (attempt > maxRetries) {
                 console.error(
                     `[Downloader] Permanent failure: ${item.url} after ${maxRetries} retries`
@@ -75,9 +94,7 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES) {
                 onProgress(item.index, "retrying", item.savePath);
 
                 // backoff delay before retrying
-                await new Promise((res) =>
-                    setTimeout(res, 500 * attempt)
-                );
+                await new Promise((res) => setTimeout(res, 500 * attempt));
             }
         }
     }
@@ -86,7 +103,7 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES) {
 /**
  * Run downloads with concurrency limit
  */
-async function startDownload(manifest, options, onProgress) {
+async function startDownload(manifest, options, onProgress, isCancelled) {
     const maxConnections = options.maxConnections || 5;
 
     let active = 0;
@@ -94,16 +111,21 @@ async function startDownload(manifest, options, onProgress) {
 
     return new Promise((resolve) => {
         function next() {
-            if (index >= manifest.length && active === 0) {
+            if ((index >= manifest.length || (isCancelled && isCancelled())) && active === 0) {
                 resolve();
                 return;
             }
 
             while (active < maxConnections && index < manifest.length) {
+                if (isCancelled && isCancelled()) {
+                    resolve();
+                    return;
+                }
+
                 const item = manifest[index++];
                 active++;
 
-                downloadWithRetries(item, onProgress, MAX_RETRIES)
+                downloadWithRetries(item, onProgress, MAX_RETRIES, isCancelled)
                     .finally(() => {
                         active--;
                         next();
