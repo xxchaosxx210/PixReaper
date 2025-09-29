@@ -17,32 +17,74 @@ const MAX_RETRIES = 3;
 /**
  * Download a single file from URL to savePath
  */
-async function downloadFile(url, savePath) {
+/**
+ * Download a single file from URL to savePath
+ * - follows redirects
+ * - validates content-type is image/*
+ */
+async function downloadFile(url, savePath, redirectCount = 0) {
+    const MAX_REDIRECTS = 5;
+
     // Ensure absolute path
     let absolutePath = path.isAbsolute(savePath)
         ? savePath
         : path.join(app.getPath("downloads"), savePath);
 
     absolutePath = path.normalize(absolutePath);
-
     await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
 
     return new Promise((resolve, reject) => {
         const client = url.startsWith("https") ? https : http;
 
-        client
-            .get(url, (res) => {
+        const req = client.get(
+            url,
+            {
+                headers: {
+                    "User-Agent": "PixReaper/1.0",
+                    "Referer": url   // ⚠️ sometimes needed for hotlink-protected hosts
+                }
+            },
+            (res) => {
+                // Handle redirects
+                if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
+                    if (redirectCount >= MAX_REDIRECTS) {
+                        reject(new Error("Too many redirects"));
+                        return;
+                    }
+                    const location = res.headers.location;
+                    if (!location) {
+                        reject(new Error("Redirect with no location header"));
+                        return;
+                    }
+                    // Close current response & recurse
+                    res.resume();
+                    resolve(downloadFile(location, savePath, redirectCount + 1));
+                    return;
+                }
+
+                // Non-200 response
                 if (res.statusCode !== 200) {
                     reject(new Error(`HTTP ${res.statusCode}`));
                     return;
                 }
 
+                // Validate content-type
+                const contentType = res.headers["content-type"] || "";
+                if (!contentType.startsWith("image/")) {
+                    reject(new Error(`Invalid content-type: ${contentType}`));
+                    res.resume(); // discard body
+                    return;
+                }
+
+                // Write to file
                 const fileStream = fs.createWriteStream(absolutePath);
                 streamPipeline(res, fileStream)
                     .then(() => resolve(absolutePath))
                     .catch(reject);
-            })
-            .on("error", reject);
+            }
+        );
+
+        req.on("error", reject);
     });
 }
 
@@ -54,7 +96,6 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
 
     while (attempt <= maxRetries) {
         if (isCancelled && isCancelled()) {
-            console.warn(`[Downloader] Cancelled before starting: ${item.url}`);
             item.status = "cancelled";
             onProgress(item.index, "cancelled", item.savePath);
             return;
@@ -63,7 +104,6 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
         try {
             const absolutePath = await downloadFile(item.url, item.savePath);
             if (isCancelled && isCancelled()) {
-                console.warn(`[Downloader] Cancelled mid-download: ${item.url}`);
                 item.status = "cancelled";
                 onProgress(item.index, "cancelled", item.savePath);
                 return;
@@ -75,25 +115,20 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
         } catch (err) {
             attempt++;
             if (isCancelled && isCancelled()) {
-                console.warn(`[Downloader] Cancelled during retry: ${item.url}`);
                 item.status = "cancelled";
                 onProgress(item.index, "cancelled", item.savePath);
                 return;
             }
+
             if (attempt > maxRetries) {
-                console.error(
-                    `[Downloader] Permanent failure: ${item.url} after ${maxRetries} retries`
-                );
+                // ✅ only log once, after all retries exhausted
+                console.error(`[Downloader] Permanent failure: ${item.url} (${err.message})`);
                 item.status = "failed";
                 onProgress(item.index, "failed", item.savePath);
                 return;
             } else {
-                console.warn(
-                    `[Downloader] Retry ${attempt}/${maxRetries} for ${item.url} (${err.message})`
-                );
+                // ✅ don’t log retries, only tell UI
                 onProgress(item.index, "retrying", item.savePath);
-
-                // backoff delay before retrying
                 await new Promise((res) => setTimeout(res, 500 * attempt));
             }
         }
