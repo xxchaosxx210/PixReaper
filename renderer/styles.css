@@ -263,3 +263,27 @@ body {
     background-color: #aaa;
     cursor: default;
 }
+
+.ext-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ext-options label {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #f9f9f9;
+}
+
+.ext-options label:hover {
+    background: #eee;
+}
+
+.ext-options input[type="checkbox"] {
+    margin-right: 4px;
+}
