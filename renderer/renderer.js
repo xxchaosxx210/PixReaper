@@ -20,6 +20,29 @@ window.electronAPI.receive("choose-folder:result", (folderPath) => {
     }
 });
 
+// --- Toggle Webview Visibility ---
+const toggleViewBtn = document.getElementById("toggleViewBtn");
+let webviewVisible = true;
+
+toggleViewBtn.addEventListener("click", () => {
+    if (webviewVisible) {
+        // Hide webview + splitter
+        webview.style.display = "none";
+        document.getElementById("splitter").style.display = "none";
+        // Expand bottom panel
+        document.getElementById("bottom-panel").style.flex = "1 1 auto";
+        toggleViewBtn.textContent = "🖥️ Show View";
+    } else {
+        // Show webview + splitter
+        webview.style.display = "flex";
+        document.getElementById("splitter").style.display = "block";
+        document.getElementById("bottom-panel").style.flex = "1";
+        toggleViewBtn.textContent = "🖥️ Hide View";
+    }
+    webviewVisible = !webviewVisible;
+});
+
+
 goButton.addEventListener("click", () => {
     let url = urlInput.value.trim();
     if (!/^https?:\/\//i.test(url)) {

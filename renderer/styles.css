@@ -14,6 +14,34 @@ body {
     border-bottom: 2px solid #ccc;
 }
 
+/* --- Webview toggle support --- */
+#top-panel.hidden #browserView {
+    display: none;
+    /* completely hide webview */
+}
+
+#top-panel.hidden {
+    flex: 0;
+    /* collapse height */
+    border-bottom: none;
+    /* cleaner transition */
+}
+
+#bottom-panel {
+    transition: flex 0.3s ease;
+}
+
+#nav-bar button#toggleViewBtn {
+    background-color: #6c757d;
+    color: #fff;
+    border-radius: 4px;
+}
+
+#nav-bar button#toggleViewBtn:hover {
+    background-color: #5a6268;
+}
+
+
 #nav-bar {
     display: flex;
     padding: 4px;
