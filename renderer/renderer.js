@@ -70,6 +70,16 @@ scanButton.addEventListener("click", async () => {
 window.electronAPI.receive("scan-progress", (data) => {
     console.log("[Renderer] Got scan-progress:", data);
 
+    // ✅ get allowed extensions from checkboxes
+    const allowedExts = Array.from(
+        document.querySelectorAll(".ext-option:checked")
+    ).map(cb => cb.value.toLowerCase());
+
+    if (!isAllowedExtension(data.resolved || data.original, allowedExts)) {
+        console.warn("[Renderer] Skipped disallowed file:", data.resolved || data.original);
+        return; // ❌ don’t add to results or count
+    }
+
     const index = resultsList.children.length + 1;
     const li = document.createElement("li");
     li.className = "pending";
@@ -89,18 +99,6 @@ window.electronAPI.receive("scan-progress", (data) => {
     if (resultsList.children.length === 1) {
         downloadBtn.style.display = "inline-block";
     }
-});
-
-// --- Cancel Button Logic ---
-cancelBtn.addEventListener("click", () => {
-    console.log("[Renderer] Cancel requested.");
-    if (statusText.textContent.includes("Scanning")) {
-        window.electronAPI.send("scan:cancel");
-    } else if (statusText.textContent.includes("Downloading")) {
-        window.electronAPI.send("download:cancel");
-    }
-    statusText.textContent = "Status: Cancelling...";
-    cancelBtn.disabled = true; // ✅ disable until reset
 });
 
 // --- Options Modal Logic ---
@@ -145,6 +143,14 @@ function sanitizeFilename(name) {
     return name.replace(/[<>:"/\\|?*]+/g, "_");
 }
 
+// --- Allowed extensions filter ---
+function isAllowedExtension(url, allowed) {
+    if (!url) return false;
+    const clean = url.split("?")[0].toLowerCase();
+    return allowed.some(ext => clean.endsWith("." + ext.toLowerCase()));
+}
+
+
 function deriveSlugFromUrl(url) {
     try {
         const u = new URL(url);
@@ -161,7 +167,7 @@ function deriveSlugFromUrl(url) {
 downloadBtn.addEventListener("click", async () => {
     console.log("[Renderer] Building download manifest...");
     downloadBtn.style.display = "none";
-    cancelBtn.style.display = "inline-block"; // ✅ show cancel during download
+    cancelBtn.style.display = "inline-block";
 
     const options = {
         prefix: document.getElementById("prefix").value.trim(),
@@ -180,6 +186,11 @@ downloadBtn.addEventListener("click", async () => {
 
     currentManifest = [];
 
+    // ✅ get allowed extensions from checkboxes
+    const allowedExts = Array.from(
+        document.querySelectorAll(".ext-option:checked")
+    ).map(cb => cb.value.toLowerCase());
+
     let folder = options.savePath;
     if (options.createSubfolder) {
         const currentUrl = await webview.getURL();
@@ -192,8 +203,14 @@ downloadBtn.addEventListener("click", async () => {
 
     items.forEach((link, i) => {
         const url = link.getAttribute("href");
-        const index = i + 1;
 
+        // ✅ Skip disallowed extensions
+        if (!isAllowedExtension(url, allowedExts)) {
+            console.log("[Renderer] Skipping disallowed file:", url);
+            return;
+        }
+
+        const index = currentManifest.length + 1; // ✅ only count kept items
         let base = url.split("/").pop().split("?")[0];
         base = sanitizeFilename(base || "image");
 
@@ -235,6 +252,7 @@ downloadBtn.addEventListener("click", async () => {
         }
     });
 });
+
 
 // --- IPC: Options Load/Save ---
 window.electronAPI.receive("options:load", (opt) => {
