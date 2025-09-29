@@ -8,6 +8,7 @@ const { promisify } = require("util");
 const https = require("https");
 const http = require("http");
 const { app } = require("electron");
+const { loadOptions } = require("../config/optionsManager"); // ✅ import options
 
 const streamPipeline = promisify(pipeline);
 
@@ -15,12 +16,22 @@ const streamPipeline = promisify(pipeline);
 const MAX_RETRIES = 3;
 
 /**
- * Download a single file from URL to savePath
+ * Build regex for allowed extensions from options
  */
+function getExtRegex() {
+    const options = loadOptions();
+    const valid = options.validExtensions && options.validExtensions.length > 0
+        ? options.validExtensions
+        : ["jpg", "jpeg"]; // fallback default
+
+    return new RegExp(`\\.(${valid.join("|")})(?:$|\\?)`, "i");
+}
+
 /**
  * Download a single file from URL to savePath
  * - follows redirects
  * - validates content-type is image/*
+ * - validates extension against allowed list
  */
 async function downloadFile(url, savePath, redirectCount = 0) {
     const MAX_REDIRECTS = 5;
@@ -32,6 +43,13 @@ async function downloadFile(url, savePath, redirectCount = 0) {
 
     absolutePath = path.normalize(absolutePath);
     await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
+
+    // ✅ Extension check (based on URL or savePath)
+    const extRegex = getExtRegex();
+    const checkTarget = url.split("?")[0].toLowerCase();
+    if (!extRegex.test(checkTarget)) {
+        throw new Error(`Disallowed extension: ${checkTarget}`);
+    }
 
     return new Promise((resolve, reject) => {
         const client = url.startsWith("https") ? https : http;
@@ -56,7 +74,6 @@ async function downloadFile(url, savePath, redirectCount = 0) {
                         reject(new Error("Redirect with no location header"));
                         return;
                     }
-                    // Close current response & recurse
                     res.resume();
                     resolve(downloadFile(location, savePath, redirectCount + 1));
                     return;
@@ -121,13 +138,11 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
             }
 
             if (attempt > maxRetries) {
-                // ✅ only log once, after all retries exhausted
                 console.error(`[Downloader] Permanent failure: ${item.url} (${err.message})`);
                 item.status = "failed";
                 onProgress(item.index, "failed", item.savePath);
                 return;
             } else {
-                // ✅ don’t log retries, only tell UI
                 onProgress(item.index, "retrying", item.savePath);
                 await new Promise((res) => setTimeout(res, 500 * attempt));
             }

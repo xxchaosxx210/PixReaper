@@ -17,7 +17,8 @@ const DEFAULT_OPTIONS = {
     createSubfolder: true,   // if true: try to use page URL slug, else fallback to timestamp
     maxConnections: 10,
     indexing: "order",       // "order" or "none"
-    debugLogging: false      // toggle debug logging
+    debugLogging: false,     // toggle debug logging
+    validExtensions: ["jpg", "jpeg"] // ✅ default allowed extensions
 };
 
 /**
@@ -40,6 +41,15 @@ function loadOptions() {
 
             if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
                 merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
+            }
+
+            // ✅ Ensure validExtensions is always an array of normalized strings
+            if (!Array.isArray(merged.validExtensions)) {
+                merged.validExtensions = [...DEFAULT_OPTIONS.validExtensions];
+            } else {
+                merged.validExtensions = merged.validExtensions.map(ext =>
+                    String(ext).toLowerCase().replace(/^\./, "")
+                );
             }
 
             return merged;
@@ -67,6 +77,15 @@ function saveOptions(newOptions = {}) {
         merged.savePath = DEFAULT_OPTIONS.savePath;
     } else {
         merged.savePath = path.normalize(merged.savePath);
+    }
+
+    // ✅ Normalize extensions before saving
+    if (!Array.isArray(merged.validExtensions)) {
+        merged.validExtensions = [...DEFAULT_OPTIONS.validExtensions];
+    } else {
+        merged.validExtensions = merged.validExtensions.map(ext =>
+            String(ext).toLowerCase().replace(/^\./, "")
+        );
     }
 
     try {

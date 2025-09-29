@@ -121,13 +121,19 @@ maxConnections.addEventListener("input", () => {
     maxConnectionsValue.textContent = maxConnections.value;
 });
 saveOptions.addEventListener("click", () => {
+    // ✅ collect selected extensions
+    const selectedExts = Array.from(
+        document.querySelectorAll(".ext-option:checked")
+    ).map(cb => cb.value);
+
     const newOptions = {
         prefix: document.getElementById("prefix").value.trim(),
         savePath: document.getElementById("savePath").value.trim(),
         createSubfolder: document.getElementById("subfolder").checked,
         indexing: document.querySelector('input[name="indexing"]:checked').value,
         maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
-        debugLogging: document.getElementById("debugLogging").checked
+        debugLogging: document.getElementById("debugLogging").checked,
+        validExtensions: selectedExts // ✅ new
     };
     console.log("[Renderer] Saving options:", newOptions);
     window.electronAPI.send("options:save", newOptions);
@@ -247,6 +253,12 @@ window.electronAPI.receive("options:load", (opt) => {
     maxConnectionsValue.textContent = slider.value;
 
     document.getElementById("debugLogging").checked = !!opt.debugLogging;
+
+    // ✅ Restore validExtensions checkboxes
+    const allowed = opt.validExtensions ?? ["jpg", "jpeg"];
+    document.querySelectorAll(".ext-option").forEach(cb => {
+        cb.checked = allowed.includes(cb.value);
+    });
 });
 
 window.electronAPI.receive("options:saved", (saved) => {
@@ -265,7 +277,6 @@ window.electronAPI.receive("scan-complete", () => {
     }
 });
 
-// --- IPC: Download Progress ---
 // --- IPC: Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
     downloadCompleted = currentManifest.filter((e) => e.status === "success").length;

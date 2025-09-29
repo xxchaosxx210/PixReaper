@@ -12,6 +12,17 @@ const fetchWithCookies = fetchCookie(fetch, jar);
 
 // debug logs
 const { logDebug, logWarn, logError } = require("../utils/logger");
+const { loadOptions } = require("../config/optionsManager"); // ✅ import options
+
+// --- Utility: get regex for valid extensions ---
+function getExtRegex() {
+    const options = loadOptions();
+    const valid = options.validExtensions && options.validExtensions.length > 0
+        ? options.validExtensions
+        : ["jpg", "jpeg"]; // fallback default
+
+    return new RegExp(`\\.(${valid.join("|")})(?:$|\\?)`, "i");
+}
 
 // --- Host resolvers ---
 const hostResolvers = {
@@ -22,12 +33,13 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`Pixhost HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector("#image") || doc.querySelector("img#show_image");
-            if (img && img.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             logWarn("Pixhost resolver failed:", url);
             return null;
@@ -37,13 +49,14 @@ const hostResolvers = {
         }
     },
 
-    // --- ImageBam (fixed with cookie injection) ---
+    // --- ImageBam (cookie bypass) ---
     "imagebam.com": async (url) => {
         try {
             const res1 = await fetchWithCookies(url);
             if (!res1.ok) throw new Error(`ImageBam HTTP ${res1.status}`);
             const html1 = await res1.text();
             const doc1 = new JSDOM(html1).window.document;
+            const extRegex = getExtRegex();
 
             const continueLink = doc1.querySelector("#continue a[data-shown='inter']");
             if (continueLink) {
@@ -67,17 +80,16 @@ const hostResolvers = {
                     doc2.querySelector(".main-image") ||
                     doc2.querySelector("img#mainImage");
 
-                if (img?.src) return new URL(img.src, url).href;
+                if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
                 return null;
             }
 
-            // No continue link (cookie already set)
             const img =
                 doc1.querySelector("#imageContainer img") ||
                 doc1.querySelector(".main-image") ||
                 doc1.querySelector("img#mainImage");
 
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
             return null;
         } catch (err) {
             logError("ImageBam resolver error:", err);
@@ -86,41 +98,29 @@ const hostResolvers = {
     },
 
     // --- ImageVenue ---
-    // --- ImageVenue ---
     "imagevenue.com": async (url) => {
         try {
             const res = await fetchWithCookies(url, {
-                headers: {
-                    "User-Agent": "PixReaper/1.0",
-                    "Referer": url
-                }
+                headers: { "User-Agent": "PixReaper/1.0", "Referer": url }
             });
             if (!res.ok) throw new Error(`ImageVenue HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
-            // ✅ Correct selector: full-size image
             let img = doc.querySelector("img#main-image");
-            if (img?.src && img.src.match(/\.jpe?g($|\?)/i)) {
-                return new URL(img.src, url).href;
-            }
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
-            // Fallback: any <img> ending in .jpg
             const candidates = [...doc.querySelectorAll("img")]
                 .map(el => el.src)
-                .filter(src => src && src.match(/\.jpe?g($|\?)/i));
+                .filter(src => src && extRegex.test(src));
 
-            if (candidates.length > 0) {
-                return new URL(candidates[0], url).href;
-            }
+            if (candidates.length > 0) return new URL(candidates[0], url).href;
 
-            // OG meta (rarely used, but check)
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content && og.content.match(/\.jpe?g($|\?)/i)) {
-                return new URL(og.content, url).href;
-            }
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
-            logWarn("ImageVenue resolver failed (no JPG found):", url);
+            logWarn("ImageVenue resolver failed (no match):", url);
             return null;
         } catch (err) {
             logError("ImageVenue resolver error:", err);
@@ -135,12 +135,13 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`ImgBox HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector(".img-content img");
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -156,9 +157,10 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`PimpAndHost HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -174,12 +176,13 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`PostImage HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector("img#main-image");
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -195,12 +198,13 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`TurboImageHost HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector("img.pic");
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -209,19 +213,20 @@ const hostResolvers = {
         }
     },
 
-    // --- FastPic (org + ru) ---
+    // --- FastPic ---
     "fastpic.org": async (url) => {
         try {
             const res = await fetchWithCookies(url);
             if (!res.ok) throw new Error(`FastPic HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector("img");
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -238,12 +243,13 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`ImageTwist HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector("img#image");
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -259,12 +265,13 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`ImgView HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector("img.pic");
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -280,12 +287,13 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`Radikal HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector("img#mainImage");
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -301,12 +309,13 @@ const hostResolvers = {
             if (!res.ok) throw new Error(`ImageUpper HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
+            const extRegex = getExtRegex();
 
             let img = doc.querySelector("img#img");
-            if (img?.src) return new URL(img.src, url).href;
+            if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
 
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
 
             return null;
         } catch (err) {
@@ -347,4 +356,3 @@ function isSupportedHost(url) {
 }
 
 module.exports = { resolveLink, isSupportedHost };
-
