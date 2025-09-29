@@ -86,19 +86,41 @@ const hostResolvers = {
     },
 
     // --- ImageVenue ---
+    // --- ImageVenue ---
     "imagevenue.com": async (url) => {
         try {
-            const res = await fetchWithCookies(url);
+            const res = await fetchWithCookies(url, {
+                headers: {
+                    "User-Agent": "PixReaper/1.0",
+                    "Referer": url
+                }
+            });
             if (!res.ok) throw new Error(`ImageVenue HTTP ${res.status}`);
             const html = await res.text();
             const doc = new JSDOM(html).window.document;
 
-            let img = doc.querySelector("img#img");
-            if (img?.src) return new URL(img.src, url).href;
+            // ✅ Correct selector: full-size image
+            let img = doc.querySelector("img#main-image");
+            if (img?.src && img.src.match(/\.jpe?g($|\?)/i)) {
+                return new URL(img.src, url).href;
+            }
 
+            // Fallback: any <img> ending in .jpg
+            const candidates = [...doc.querySelectorAll("img")]
+                .map(el => el.src)
+                .filter(src => src && src.match(/\.jpe?g($|\?)/i));
+
+            if (candidates.length > 0) {
+                return new URL(candidates[0], url).href;
+            }
+
+            // OG meta (rarely used, but check)
             const og = doc.querySelector('meta[property="og:image"]');
-            if (og?.content) return new URL(og.content, url).href;
+            if (og?.content && og.content.match(/\.jpe?g($|\?)/i)) {
+                return new URL(og.content, url).href;
+            }
 
+            logWarn("ImageVenue resolver failed (no JPG found):", url);
             return null;
         } catch (err) {
             logError("ImageVenue resolver error:", err);
