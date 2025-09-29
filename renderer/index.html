@@ -69,9 +69,6 @@
             <label for="maxConnections">Max connections:</label>
             <input type="range" id="maxConnections" min="1" max="50" value="10" />
             <span id="maxConnectionsValue">10</span>
-
-            <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
-
             <!-- ✅ NEW: Allowed file extensions -->
             <h3>Allowed File Extensions</h3>
             <div id="ext-options" class="ext-options">
@@ -83,6 +80,9 @@
                 <label><input type="checkbox" class="ext-option" value="bmp"> BMP</label>
                 <label><input type="checkbox" class="ext-option" value="tiff"> TIFF</label>
             </div>
+
+            <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
+
 
             <div class="modal-buttons">
                 <button id="cancelOptions">Cancel</button>
