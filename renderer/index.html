@@ -25,7 +25,6 @@
             <span id="statusText">Status: Ready</span>
             <span id="imageCount">Images found: 0</span>
             <div class="status-buttons">
-                <!-- ✂ removed inline style, handled via CSS -->
                 <button id="downloadBtn">⬇ Download</button>
                 <button id="cancelBtn" class="cancel">✖ Cancel</button>
             </div>
@@ -39,19 +38,37 @@
 
     <div id="splitter" title="Drag to resize results"></div>
 
-
     <!-- Results panel -->
     <div id="bottom-panel">
         <ul id="results"></ul>
     </div>
 
     <!-- ⚙️ Options Modal -->
-    <!-- ⚙️ Options Modal -->
     <div id="optionsModal" class="modal">
         <div class="modal-content">
             <h2>⚙️ PixReaper Options</h2>
 
-            <!-- ... existing fields ... -->
+            <label for="savePath">Save Path</label>
+            <div style="display:flex; gap:6px;">
+                <input type="text" id="savePath" placeholder="e.g. C:\Users\Test\Downloads\PixReaper" />
+                <button type="button" id="browsePath">Browse</button>
+            </div>
+
+            <label>Filename Prefix:</label>
+            <input type="text" id="prefix" placeholder="PixReaper_" />
+
+            <label>Indexing:</label>
+            <div>
+                <label><input type="radio" name="indexing" value="order" checked /> Keep order</label>
+                <label><input type="radio" name="indexing" value="none" /> None</label>
+            </div>
+
+            <label><input type="checkbox" id="subfolder" /> Create subfolder per download (URL slug or
+                timestamp)</label>
+
+            <label for="maxConnections">Max connections:</label>
+            <input type="range" id="maxConnections" min="1" max="50" value="10" />
+            <span id="maxConnectionsValue">10</span>
 
             <h3>Allowed File Extensions</h3>
             <div id="ext-options" class="ext-options">
@@ -64,9 +81,13 @@
                 <label><input type="checkbox" class="ext-option" value="tiff"> TIFF</label>
             </div>
 
+            <!-- ✅ New Hosts Section -->
             <h3>Supported Hosts</h3>
-            <textarea id="hostList" rows="4" style="width:100%;"></textarea>
-            <small>Enter one hostname per line (e.g. imagebam.com, imgbox.com)</small>
+            <p style="font-size: 13px; color: #555; margin: 4px 0;">
+                Enter one hostname per line (e.g. <code>imgbox.com</code>, <code>pixhost.to</code>).
+            </p>
+            <textarea id="hostList" style="width:100%; height:100px; resize:vertical;"
+                placeholder="pixhost.to&#10;imagebam.com&#10;imgbox.com"></textarea>
 
             <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
 
@@ -76,7 +97,6 @@
             </div>
         </div>
     </div>
-
 
     <script src="renderer.js"></script>
 </body>

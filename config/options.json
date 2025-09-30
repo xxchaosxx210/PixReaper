@@ -1,10 +1,10 @@
 {
   "prefix": "",
-  "savePath": "",
-  "createSubfolder": false,
-  "indexing": "order",
+  "savePath": "C:\\Users\\chaos\\Downloads\\",
+  "createSubfolder": true,
   "maxConnections": 10,
-  "debugLogging": false,
+  "indexing": "order",
+  "debugLogging": true,
   "validExtensions": [
     "jpg",
     "jpeg"
@@ -15,5 +15,6 @@
     "pixhost",
     "imagevenue",
     "pimpandhost"
-  ]
+  ],
+  "bottomPanelHeight": null
 }

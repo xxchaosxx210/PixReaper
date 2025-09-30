@@ -100,7 +100,6 @@ const downloadBtn = document.getElementById("downloadBtn");
 const cancelBtn = document.getElementById("cancelBtn");
 
 // --- Scan ---
-// --- Scan ---
 scanButton.addEventListener("click", async () => {
     resultsList.innerHTML = "";
     currentManifest = [];
@@ -111,74 +110,23 @@ scanButton.addEventListener("click", async () => {
     statusText.textContent = "Status: Scanning...";
     progressBar.style.width = "0%";
 
-    // Use hosts from options
+    // Grab hosts from options modal
     const hostText = document.getElementById("hostList").value;
     const validHosts = hostText.split("\n").map(h => h.trim().toLowerCase()).filter(Boolean);
-    const regex = new RegExp("(" + validHosts.join("|") + ")", "i");
 
+    // Pass host list safely into webview
     const viewerLinks = await webview.executeJavaScript(`
-        Array.from(document.querySelectorAll("a[href]"))
-          .map(a => a.href)
-          .filter(href => href && href.match(${regex}))
+        (function(hosts){
+            const regex = new RegExp("(" + hosts.join("|") + ")", "i");
+            return Array.from(document.querySelectorAll("a[href]"))
+                .map(a => a.href)
+                .filter(href => href && regex.test(href));
+        })(${JSON.stringify(validHosts)})
     `);
 
     console.log("[Renderer] Found links in page:", viewerLinks.length);
     window.electronAPI.send("scan-page", viewerLinks);
 });
-
-// --- Options Modal Logic ---
-saveOptions.addEventListener("click", () => {
-    const selectedExts = Array.from(
-        document.querySelectorAll(".ext-option:checked")
-    ).map(cb => cb.value);
-
-    const hostList = document.getElementById("hostList").value
-        .split("\n")
-        .map(h => h.trim().toLowerCase())
-        .filter(Boolean);
-
-    const newOptions = {
-        prefix: document.getElementById("prefix").value.trim(),
-        savePath: document.getElementById("savePath").value.trim(),
-        createSubfolder: document.getElementById("subfolder").checked,
-        indexing: document.querySelector('input[name="indexing"]:checked').value,
-        maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
-        debugLogging: document.getElementById("debugLogging").checked,
-        validExtensions: selectedExts,
-        validHosts: hostList
-    };
-    console.log("[Renderer] Saving options:", newOptions);
-    window.electronAPI.send("options:save", newOptions);
-    optionsModal.style.display = "none";
-});
-
-// --- IPC: Options Load ---
-window.electronAPI.receive("options:load", (opt) => {
-    console.log("[Renderer] Loaded options:", opt);
-    document.getElementById("prefix").value = opt.prefix ?? "";
-    document.getElementById("savePath").value = opt.savePath ?? "";
-    document.getElementById("subfolder").checked = !!opt.createSubfolder;
-
-    const indexing = opt.indexing ?? "order";
-    document.querySelectorAll('input[name="indexing"]').forEach((radio) => {
-        radio.checked = radio.value === indexing;
-    });
-
-    const slider = document.getElementById("maxConnections");
-    slider.value = opt.maxConnections ?? 10;
-    maxConnectionsValue.textContent = slider.value;
-
-    document.getElementById("debugLogging").checked = !!opt.debugLogging;
-
-    const allowed = opt.validExtensions ?? ["jpg", "jpeg"];
-    document.querySelectorAll(".ext-option").forEach(cb => {
-        cb.checked = allowed.includes(cb.value);
-    });
-
-    // Populate host list
-    document.getElementById("hostList").value = (opt.validHosts ?? []).join("\n");
-});
-
 
 // --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
@@ -197,10 +145,16 @@ cancelOptions.addEventListener("click", () => {
 maxConnections.addEventListener("input", () => {
     maxConnectionsValue.textContent = maxConnections.value;
 });
+
 saveOptions.addEventListener("click", () => {
     const selectedExts = Array.from(
         document.querySelectorAll(".ext-option:checked")
     ).map(cb => cb.value);
+
+    const hostList = document.getElementById("hostList").value
+        .split("\n")
+        .map(h => h.trim().toLowerCase())
+        .filter(Boolean);
 
     const newOptions = {
         prefix: document.getElementById("prefix").value.trim(),
@@ -210,6 +164,7 @@ saveOptions.addEventListener("click", () => {
         maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
         debugLogging: document.getElementById("debugLogging").checked,
         validExtensions: selectedExts,
+        validHosts: hostList,
         bottomPanelHeight: parseInt(bottomPanel.style.height, 10) || null
     };
     console.log("[Renderer] Saving options:", newOptions);
@@ -325,6 +280,9 @@ window.electronAPI.receive("options:load", (opt) => {
     document.querySelectorAll(".ext-option").forEach(cb => {
         cb.checked = allowed.includes(cb.value);
     });
+
+    // Restore host list
+    document.getElementById("hostList").value = (opt.validHosts ?? []).join("\n");
 
     // Restore saved bottom panel height if available
     if (opt.bottomPanelHeight) {
