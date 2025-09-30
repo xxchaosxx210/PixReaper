@@ -23,11 +23,49 @@ window.electronAPI.receive("choose-folder:result", (folderPath) => {
 // --- Toggle Webview Visibility ---
 const toggleViewBtn = document.getElementById("toggleViewBtn");
 const splitter = document.getElementById("splitter");
+const bottomPanel = document.getElementById("bottom-panel");
 
 toggleViewBtn.addEventListener("click", () => {
     const isHidden = webview.classList.toggle("hidden");
     splitter.style.display = isHidden ? "none" : "block";
     toggleViewBtn.textContent = isHidden ? "🖥️ Show View" : "🖥️ Hide View";
+
+    // Reset layout when toggling
+    if (isHidden) {
+        bottomPanel.style.height = "auto";
+        bottomPanel.style.flex = "1 1 auto";  // take full space
+    } else {
+        bottomPanel.style.flex = "0 0 120px"; // back to fixed height
+        bottomPanel.style.height = "";        // let CSS rule apply
+    }
+});
+
+// --- Resizable Bottom Panel ---
+let isResizing = false;
+
+splitter.addEventListener("mousedown", (e) => {
+    if (webview.classList.contains("hidden")) return; // disable resize when webview hidden
+    isResizing = true;
+    document.body.style.cursor = "row-resize";
+    e.preventDefault();
+});
+
+window.addEventListener("mousemove", (e) => {
+    if (!isResizing) return;
+
+    // Calculate new height for bottom-panel
+    const newHeight = window.innerHeight - e.clientY;
+    const clamped = Math.min(Math.max(newHeight, 60), window.innerHeight * 0.7);
+
+    bottomPanel.style.height = clamped + "px";
+    bottomPanel.style.flex = "0 0 auto"; // lock height
+});
+
+window.addEventListener("mouseup", () => {
+    if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = "";
+    }
 });
 
 goButton.addEventListener("click", () => {

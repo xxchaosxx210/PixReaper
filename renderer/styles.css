@@ -27,20 +27,56 @@ body {
     min-height: 0;
 }
 
-/* Hide webview cleanly */
+/* Hide webview cleanly (no flex/height override) */
 #browserView.hidden {
     display: none;
-    height: 0;
-    flex: 0 0 auto;
 }
 
-/* --- Results panel expands when webview hidden --- */
+/* --- Results panel behavior --- */
+/* Default: fixed height when webview is visible */
 #bottom-panel {
+    flex: 0 0 120px;
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* Expand only when webview is hidden */
+#browserView.hidden~#bottom-panel {
+    flex: 1 1 auto;
+}
+
+/* --- Results List --- */
+#results {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 10px;
-    background: #fafafa;
     min-height: 0;
+    list-style: none;
+    margin: 0;
+    padding: 10px;
+}
+
+#results li {
+    flex: 1 1 auto;
+    width: 100%;
+    padding: 4px 0;
+    font-size: 14px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+#results li a {
+    flex: 1 1 auto;
+    color: #007acc;
+    text-decoration: none;
+    word-break: break-all;
+}
+
+#results li a:hover {
+    text-decoration: underline;
 }
 
 /* --- Nav Bar --- */
@@ -77,31 +113,6 @@ body {
     height: 6px;
     background: #ccc;
     cursor: row-resize;
-}
-
-/* --- Results List --- */
-#results {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-#results li {
-    padding: 4px 0;
-    font-size: 14px;
-    border-bottom: 1px solid #e0e0e0;
-    display: flex;
-    align-items: center;
-}
-
-#results li a {
-    color: #007acc;
-    text-decoration: none;
-    word-break: break-all;
-}
-
-#results li a:hover {
-    text-decoration: underline;
 }
 
 /* --- Status Bar --- */
