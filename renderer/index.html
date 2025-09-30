@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>PixReaper</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+    <div id="top-panel">
+        <div id="nav-bar">
+            <input type="text" id="urlInput" placeholder="Enter URL..." />
+            <button id="goBtn">Go</button>
+            <button id="scanBtn">Scan Page</button>
+            <button id="toggleViewBtn">👁 Hide View</button>
+            <button id="optionsBtn">⚙️ Options</button>
+        </div>
+
+        <webview id="browserView" src="http://vintage-erotica-forum.com/t10913-p14-tanya-prime.html" allowpopups>
+        </webview>
+
+        <!-- ✅ Status Bar -->
+        <div id="status-bar">
+            <span id="statusText">Status: Ready</span>
+            <span id="imageCount">Images found: 0</span>
+            <div class="status-buttons">
+                <button id="downloadBtn">⬇ Download</button>
+                <button id="cancelBtn" class="cancel">✖ Cancel</button>
+            </div>
+        </div>
+
+        <!-- ✅ Progress Bar -->
+        <div id="progressContainer">
+            <div id="progressBar"></div>
+        </div>
+    </div>
+
+    <div id="splitter" title="Drag to resize results"></div>
+
+    <!-- Results panel -->
+    <div id="bottom-panel">
+        <ul id="results"></ul>
+    </div>
+
+    <!-- ⚙️ Options Modal -->
+    <div id="optionsModal" class="modal">
+        <div class="modal-content">
+            <h2>⚙️ PixReaper Options</h2>
+
+            <label for="savePath">Save Path</label>
+            <div style="display:flex; gap:6px;">
+                <input type="text" id="savePath" placeholder="e.g. C:\Users\Test\Downloads\PixReaper" />
+                <button type="button" id="browsePath">Browse</button>
+            </div>
+
+            <label>Filename Prefix:</label>
+            <input type="text" id="prefix" placeholder="PixReaper_" />
+
+            <label>Indexing:</label>
+            <div>
+                <label><input type="radio" name="indexing" value="order" checked /> Keep order</label>
+                <label><input type="radio" name="indexing" value="none" /> None</label>
+            </div>
+
+            <label><input type="checkbox" id="subfolder" /> Create subfolder per download (URL slug or
+                timestamp)</label>
+
+            <label for="maxConnections">Max connections:</label>
+            <input type="range" id="maxConnections" min="1" max="50" value="10" />
+            <span id="maxConnectionsValue">10</span>
+
+            <h3>Allowed File Extensions</h3>
+            <div id="ext-options" class="ext-options">
+                <label><input type="checkbox" class="ext-option" value="jpg" checked> JPG</label>
+                <label><input type="checkbox" class="ext-option" value="jpeg" checked> JPEG</label>
+                <label><input type="checkbox" class="ext-option" value="png"> PNG</label>
+                <label><input type="checkbox" class="ext-option" value="gif"> GIF</label>
+                <label><input type="checkbox" class="ext-option" value="webp"> WEBP</label>
+                <label><input type="checkbox" class="ext-option" value="bmp"> BMP</label>
+                <label><input type="checkbox" class="ext-option" value="tiff"> TIFF</label>
+            </div>
+
+            <!-- ✅ New Hosts Section -->
+            <h3>Supported Hosts</h3>
+            <p style="font-size: 13px; color: #555; margin: 4px 0;">
+                Enter one hostname per line (e.g. <code>imgbox.com</code>, <code>pixhost.to</code>).
+            </p>
+            <textarea id="hostList" style="width:100%; height:100px; resize:vertical;"
+                placeholder="pixhost.to&#10;imagebam.com&#10;imgbox.com"></textarea>
+
+            <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
+
+            <div class="modal-buttons">
+                <button id="cancelOptions">Cancel</button>
+                <button id="saveOptions">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+
+</html>
