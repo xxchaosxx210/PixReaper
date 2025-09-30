@@ -24,7 +24,32 @@ function getExtRegex() {
     return new RegExp(`\\.(${valid.join("|")})(?:$|\\?)`, "i");
 }
 
-// --- Host resolvers ---
+// --- Generic fallback resolver ---
+async function genericResolver(url) {
+    try {
+        const res = await fetchWithCookies(url);
+        if (!res.ok) throw new Error(`Generic resolver HTTP ${res.status}`);
+        const html = await res.text();
+        const doc = new JSDOM(html).window.document;
+        const extRegex = getExtRegex();
+
+        // Look for obvious <img>
+        let img = doc.querySelector("img");
+        if (img?.src && extRegex.test(img.src)) return new URL(img.src, url).href;
+
+        // Try OpenGraph
+        const og = doc.querySelector('meta[property="og:image"]');
+        if (og?.content && extRegex.test(og.content)) return new URL(og.content, url).href;
+
+        logWarn("Generic resolver failed (no match):", url);
+        return null;
+    } catch (err) {
+        logError("Generic resolver error:", err);
+        return null;
+    }
+}
+
+// --- Host resolvers (custom) ---
 const hostResolvers = {
     // --- Pixhost ---
     "pixhost.to": async (url) => {
@@ -329,12 +354,24 @@ const hostResolvers = {
 async function resolveLink(url) {
     try {
         const hostname = new URL(url).hostname.replace(/^www\./, "");
+        const options = loadOptions();
+        const validHosts = options.validHosts || [];
+
+        // 1) Try custom resolver
         const resolverKey = Object.keys(hostResolvers).find((host) =>
             hostname.endsWith(host)
         );
         if (resolverKey) {
             return await hostResolvers[resolverKey](url);
         }
+
+        // 2) If host is in validHosts → generic resolver
+        if (validHosts.some(h => hostname.endsWith(h))) {
+            logDebug(`Using generic resolver for: ${hostname}`);
+            return await genericResolver(url);
+        }
+
+        // 3) Unsupported host
         logWarn("No resolver for host:", hostname);
         return null;
     } catch (err) {
@@ -347,8 +384,11 @@ async function resolveLink(url) {
 function isSupportedHost(url) {
     try {
         const hostname = new URL(url).hostname.replace(/^www\./, "");
-        return Object.keys(hostResolvers).some((host) =>
-            hostname.endsWith(host)
+        const options = loadOptions();
+        const validHosts = options.validHosts || [];
+        return (
+            Object.keys(hostResolvers).some((host) => hostname.endsWith(host)) ||
+            validHosts.some((h) => hostname.endsWith(h))
         );
     } catch {
         return false;

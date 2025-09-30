@@ -100,6 +100,7 @@ const downloadBtn = document.getElementById("downloadBtn");
 const cancelBtn = document.getElementById("cancelBtn");
 
 // --- Scan ---
+// --- Scan ---
 scanButton.addEventListener("click", async () => {
     resultsList.innerHTML = "";
     currentManifest = [];
@@ -110,48 +111,74 @@ scanButton.addEventListener("click", async () => {
     statusText.textContent = "Status: Scanning...";
     progressBar.style.width = "0%";
 
+    // Use hosts from options
+    const hostText = document.getElementById("hostList").value;
+    const validHosts = hostText.split("\n").map(h => h.trim().toLowerCase()).filter(Boolean);
+    const regex = new RegExp("(" + validHosts.join("|") + ")", "i");
+
     const viewerLinks = await webview.executeJavaScript(`
         Array.from(document.querySelectorAll("a[href]"))
           .map(a => a.href)
-          .filter(href => href && href.match(/(imagebam|imgbox|pixhost|imagevenue|pimpandhost)/i))
+          .filter(href => href && href.match(${regex}))
     `);
 
     console.log("[Renderer] Found links in page:", viewerLinks.length);
     window.electronAPI.send("scan-page", viewerLinks);
 });
 
-window.electronAPI.receive("scan-progress", (data) => {
-    console.log("[Renderer] Got scan-progress:", data);
-
-    const allowedExts = Array.from(
+// --- Options Modal Logic ---
+saveOptions.addEventListener("click", () => {
+    const selectedExts = Array.from(
         document.querySelectorAll(".ext-option:checked")
-    ).map(cb => cb.value.toLowerCase());
+    ).map(cb => cb.value);
 
-    if (!isAllowedExtension(data.resolved || data.original, allowedExts)) {
-        console.warn("[Renderer] Skipped disallowed file:", data.resolved || data.original);
-        return;
-    }
+    const hostList = document.getElementById("hostList").value
+        .split("\n")
+        .map(h => h.trim().toLowerCase())
+        .filter(Boolean);
 
-    const index = resultsList.children.length + 1;
-    const li = document.createElement("li");
-    li.className = "pending";
-    li.setAttribute("data-index", index);
-
-    li.innerHTML = `
-        <span class="status-icon pending"></span>
-        <a href="${data.resolved || data.original}" target="_blank">
-          ${data.resolved || data.original}
-        </a>
-    `;
-    resultsList.appendChild(li);
-
-    imagesFound++;
-    imagesFoundText.textContent = `Images found: ${imagesFound}`;
-
-    if (resultsList.children.length === 1) {
-        downloadBtn.style.display = "inline-block";
-    }
+    const newOptions = {
+        prefix: document.getElementById("prefix").value.trim(),
+        savePath: document.getElementById("savePath").value.trim(),
+        createSubfolder: document.getElementById("subfolder").checked,
+        indexing: document.querySelector('input[name="indexing"]:checked').value,
+        maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
+        debugLogging: document.getElementById("debugLogging").checked,
+        validExtensions: selectedExts,
+        validHosts: hostList
+    };
+    console.log("[Renderer] Saving options:", newOptions);
+    window.electronAPI.send("options:save", newOptions);
+    optionsModal.style.display = "none";
 });
+
+// --- IPC: Options Load ---
+window.electronAPI.receive("options:load", (opt) => {
+    console.log("[Renderer] Loaded options:", opt);
+    document.getElementById("prefix").value = opt.prefix ?? "";
+    document.getElementById("savePath").value = opt.savePath ?? "";
+    document.getElementById("subfolder").checked = !!opt.createSubfolder;
+
+    const indexing = opt.indexing ?? "order";
+    document.querySelectorAll('input[name="indexing"]').forEach((radio) => {
+        radio.checked = radio.value === indexing;
+    });
+
+    const slider = document.getElementById("maxConnections");
+    slider.value = opt.maxConnections ?? 10;
+    maxConnectionsValue.textContent = slider.value;
+
+    document.getElementById("debugLogging").checked = !!opt.debugLogging;
+
+    const allowed = opt.validExtensions ?? ["jpg", "jpeg"];
+    document.querySelectorAll(".ext-option").forEach(cb => {
+        cb.checked = allowed.includes(cb.value);
+    });
+
+    // Populate host list
+    document.getElementById("hostList").value = (opt.validHosts ?? []).join("\n");
+});
+
 
 // --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
