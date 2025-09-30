@@ -7,30 +7,36 @@ body {
     height: 100vh;
 }
 
+/* --- Top Panel (Nav + Webview + Status + Progress) --- */
+
 #top-panel {
     display: flex;
     flex-direction: column;
-    border-bottom: 2px solid #ccc;
     flex: 1 1 auto;
-    /* allow it to shrink or grow */
     min-height: 0;
-    /* critical for flex resizing */
 }
 
-/* --- Webview toggle support --- */
-#top-panel.hidden #browserView {
-    display: none;
-    height: 0;
+/* Add border only when webview is shown */
+#browserView:not(.hidden)+#status-bar {
+    border-top: 2px solid #ccc;
 }
 
+
+/* Webview flexes to fill space */
 #browserView {
     flex: 1 1 auto;
     border: none;
-    display: flex;
     min-height: 0;
 }
 
-/* Results panel expands when webview hidden */
+/* Hide webview cleanly */
+#browserView.hidden {
+    display: none;
+    height: 0;
+    flex: 0 0 auto;
+}
+
+/* --- Results panel expands when webview hidden --- */
 #bottom-panel {
     flex: 1 1 auto;
     overflow-y: auto;
@@ -45,6 +51,7 @@ body {
     padding: 4px;
     background: #f4f4f4;
     border-bottom: 1px solid #ddd;
+    flex: 0 0 auto;
 }
 
 #nav-bar input[type="text"] {
@@ -74,7 +81,11 @@ body {
     cursor: row-resize;
 }
 
-/* --- Results --- */
+#splitter.hidden {
+    display: none;
+}
+
+/* --- Results List --- */
 #results {
     list-style: none;
     padding: 0;
@@ -101,6 +112,7 @@ body {
 
 /* --- Status Bar --- */
 #status-bar {
+    flex: 0 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -143,6 +155,7 @@ body {
 
 /* --- Progress Bar --- */
 #progressContainer {
+    flex: 0 0 auto;
     width: 100%;
     height: 8px;
     background: #e0e0e0;
@@ -156,7 +169,7 @@ body {
     transition: width 0.3s ease;
 }
 
-/* --- Status icons --- */
+/* --- Status Icons --- */
 .status-icon {
     display: inline-block;
     width: 10px;
@@ -254,7 +267,7 @@ body {
     cursor: default;
 }
 
-/* --- Extension options grid (chips) --- */
+/* --- Extension Options Grid (Chips) --- */
 .ext-options {
     display: flex;
     flex-wrap: wrap;

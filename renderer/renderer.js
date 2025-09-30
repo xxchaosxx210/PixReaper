@@ -26,10 +26,11 @@ const topPanel = document.getElementById("top-panel");
 const splitter = document.getElementById("splitter");
 
 toggleViewBtn.addEventListener("click", () => {
-    const isHidden = topPanel.classList.toggle("hidden");
-    splitter.style.display = isHidden ? "none" : "block"; // hide splitter too
+    const isHidden = webview.classList.toggle("hidden");
+    splitter.style.display = isHidden ? "none" : "block";
     toggleViewBtn.textContent = isHidden ? "🖥️ Show View" : "🖥️ Hide View";
 });
+
 
 goButton.addEventListener("click", () => {
     let url = urlInput.value.trim();
