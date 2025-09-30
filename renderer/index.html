@@ -25,7 +25,6 @@
             <span id="statusText">Status: Ready</span>
             <span id="imageCount">Images found: 0</span>
             <div class="status-buttons">
-                <!-- ✂ removed inline style, handled via CSS -->
                 <button id="downloadBtn">⬇ Download</button>
                 <button id="cancelBtn" class="cancel">✖ Cancel</button>
             </div>
@@ -38,7 +37,6 @@
     </div>
 
     <div id="splitter" title="Drag to resize results"></div>
-
 
     <!-- Results panel -->
     <div id="bottom-panel">
@@ -83,6 +81,9 @@
                 <label><input type="checkbox" class="ext-option" value="tiff"> TIFF</label>
             </div>
 
+            <h3>Allowed Hosts</h3>
+            <textarea id="hostList" rows="6" placeholder="pixhost.to&#10;imagebam.com"></textarea>
+
             <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
 
             <div class="modal-buttons">
@@ -92,6 +93,7 @@
         </div>
     </div>
 
+    <!-- ✅ Renderer binds to these buttons -->
     <script src="renderer.js"></script>
 </body>
 
