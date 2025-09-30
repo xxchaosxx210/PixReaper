@@ -30,13 +30,12 @@ toggleViewBtn.addEventListener("click", () => {
     splitter.style.display = isHidden ? "none" : "block";
     toggleViewBtn.textContent = isHidden ? "🖥️ Show View" : "🖥️ Hide View";
 
-    // Reset layout when toggling
     if (isHidden) {
         bottomPanel.style.height = "auto";
-        bottomPanel.style.flex = "1 1 auto";  // take full space
+        bottomPanel.style.flex = "1 1 auto"; // take full space
     } else {
-        bottomPanel.style.flex = "0 0 120px"; // back to fixed height
-        bottomPanel.style.height = "";        // let CSS rule apply
+        bottomPanel.style.flex = "0 0 120px";
+        bottomPanel.style.height = ""; // let CSS / saved height apply
     }
 });
 
@@ -44,7 +43,7 @@ toggleViewBtn.addEventListener("click", () => {
 let isResizing = false;
 
 splitter.addEventListener("mousedown", (e) => {
-    if (webview.classList.contains("hidden")) return; // disable resize when webview hidden
+    if (webview.classList.contains("hidden")) return; // disable resize when hidden
     isResizing = true;
     document.body.style.cursor = "row-resize";
     e.preventDefault();
@@ -53,21 +52,27 @@ splitter.addEventListener("mousedown", (e) => {
 window.addEventListener("mousemove", (e) => {
     if (!isResizing) return;
 
-    // Calculate new height for bottom-panel
     const newHeight = window.innerHeight - e.clientY;
     const clamped = Math.min(Math.max(newHeight, 60), window.innerHeight * 0.7);
 
     bottomPanel.style.height = clamped + "px";
-    bottomPanel.style.flex = "0 0 auto"; // lock height
+    bottomPanel.style.flex = "0 0 auto";
 });
 
-window.addEventListener("mouseup", () => {
+window.addEventListener("mouseup", (e) => {
     if (isResizing) {
         isResizing = false;
         document.body.style.cursor = "";
+
+        const newHeight = window.innerHeight - e.clientY;
+        const clamped = Math.min(Math.max(newHeight, 60), window.innerHeight * 0.7);
+
+        // Persist last height
+        window.electronAPI.send("options:save", { bottomPanelHeight: clamped });
     }
 });
 
+// --- Navigation ---
 goButton.addEventListener("click", () => {
     let url = urlInput.value.trim();
     if (!/^https?:\/\//i.test(url)) {
@@ -177,7 +182,8 @@ saveOptions.addEventListener("click", () => {
         indexing: document.querySelector('input[name="indexing"]:checked').value,
         maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
         debugLogging: document.getElementById("debugLogging").checked,
-        validExtensions: selectedExts
+        validExtensions: selectedExts,
+        bottomPanelHeight: parseInt(bottomPanel.style.height, 10) || null
     };
     console.log("[Renderer] Saving options:", newOptions);
     window.electronAPI.send("options:save", newOptions);
@@ -292,6 +298,12 @@ window.electronAPI.receive("options:load", (opt) => {
     document.querySelectorAll(".ext-option").forEach(cb => {
         cb.checked = allowed.includes(cb.value);
     });
+
+    // Restore saved bottom panel height if available
+    if (opt.bottomPanelHeight) {
+        bottomPanel.style.height = opt.bottomPanelHeight + "px";
+        bottomPanel.style.flex = "0 0 auto";
+    }
 });
 
 window.electronAPI.receive("options:saved", (saved) => {

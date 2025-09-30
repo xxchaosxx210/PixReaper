@@ -8,5 +8,6 @@
   "validExtensions": [
     "jpg",
     "jpeg"
-  ]
+  ],
+  "bottomPanelHeight": 191
 }

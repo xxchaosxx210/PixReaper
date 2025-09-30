@@ -115,6 +115,12 @@ body {
     cursor: row-resize;
 }
 
+#splitter:hover {
+    background: #999;
+    /* darker to show it's draggable */
+}
+
+
 /* --- Status Bar --- */
 #status-bar {
     flex: 0 0 auto;
