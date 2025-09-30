@@ -20,17 +20,18 @@
         <webview id="browserView" src="http://vintage-erotica-forum.com/t10913-p14-tanya-prime.html" allowpopups>
         </webview>
 
-        <!-- ✅ Status Bar now inside top-panel -->
+        <!-- ✅ Status Bar -->
         <div id="status-bar">
             <span id="statusText">Status: Ready</span>
             <span id="imageCount">Images found: 0</span>
             <div class="status-buttons">
-                <button id="downloadBtn" style="display:none;">⬇ Download</button>
-                <button id="cancelBtn" style="display:none;" class="cancel">✖ Cancel</button>
+                <!-- ✂ removed inline style, handled via CSS -->
+                <button id="downloadBtn">⬇ Download</button>
+                <button id="cancelBtn" class="cancel">✖ Cancel</button>
             </div>
         </div>
 
-        <!-- ✅ Progress Bar inside top-panel too -->
+        <!-- ✅ Progress Bar -->
         <div id="progressContainer">
             <div id="progressBar"></div>
         </div>
@@ -38,7 +39,7 @@
 
     <div id="splitter"></div>
 
-    <!-- Results panel will now expand correctly -->
+    <!-- Results panel -->
     <div id="bottom-panel">
         <ul id="results"></ul>
     </div>

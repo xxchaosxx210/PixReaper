@@ -22,7 +22,6 @@ window.electronAPI.receive("choose-folder:result", (folderPath) => {
 
 // --- Toggle Webview Visibility ---
 const toggleViewBtn = document.getElementById("toggleViewBtn");
-const topPanel = document.getElementById("top-panel");
 const splitter = document.getElementById("splitter");
 
 toggleViewBtn.addEventListener("click", () => {
@@ -30,7 +29,6 @@ toggleViewBtn.addEventListener("click", () => {
     splitter.style.display = isHidden ? "none" : "block";
     toggleViewBtn.textContent = isHidden ? "🖥️ Show View" : "🖥️ Hide View";
 });
-
 
 goButton.addEventListener("click", () => {
     let url = urlInput.value.trim();

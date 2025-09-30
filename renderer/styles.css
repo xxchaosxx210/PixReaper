@@ -8,7 +8,6 @@ body {
 }
 
 /* --- Top Panel (Nav + Webview + Status + Progress) --- */
-
 #top-panel {
     display: flex;
     flex-direction: column;
@@ -20,7 +19,6 @@ body {
 #browserView:not(.hidden)+#status-bar {
     border-top: 2px solid #ccc;
 }
-
 
 /* Webview flexes to fill space */
 #browserView {
@@ -79,10 +77,6 @@ body {
     height: 6px;
     background: #ccc;
     cursor: row-resize;
-}
-
-#splitter.hidden {
-    display: none;
 }
 
 /* --- Results List --- */
@@ -151,6 +145,12 @@ body {
 #status-bar button:disabled {
     background-color: #aaa;
     cursor: default;
+}
+
+/* Ensure download/cancel start hidden */
+#downloadBtn,
+#cancelBtn {
+    display: none;
 }
 
 /* --- Progress Bar --- */
