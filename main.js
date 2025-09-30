@@ -1,8 +1,7 @@
 /* main.js */
-
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
-const { resolveLink } = require("./logic/hostResolver");
+const { resolveLink, isSupportedHost } = require("./logic/hostResolver");
 const { logDebug, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
@@ -126,14 +125,18 @@ ipcMain.on("scan-page", async (event, links) => {
     logDebug("[Main] Received links:", links.length);
     cancelScan = false;
 
-    for (let i = 0; i < links.length; i += CONCURRENCY) {
+    // ✅ filter unsupported hosts here
+    const supported = links.filter(link => isSupportedHost(link));
+    logDebug("[Main] Supported links:", supported.length);
+
+    for (let i = 0; i < supported.length; i += CONCURRENCY) {
         if (cancelScan) {
             logDebug("[Main] Scan cancelled.");
             event.sender.send("scan-complete");
             return;
         }
 
-        const batch = links.slice(i, i + CONCURRENCY);
+        const batch = supported.slice(i, i + CONCURRENCY);
 
         await Promise.all(
             batch.map(async (link) => {

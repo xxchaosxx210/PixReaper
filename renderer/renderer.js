@@ -32,10 +32,10 @@ toggleViewBtn.addEventListener("click", () => {
 
     if (isHidden) {
         bottomPanel.style.height = "auto";
-        bottomPanel.style.flex = "1 1 auto"; // take full space
+        bottomPanel.style.flex = "1 1 auto";
     } else {
         bottomPanel.style.flex = "0 0 120px";
-        bottomPanel.style.height = ""; // let CSS / saved height apply
+        bottomPanel.style.height = "";
     }
 });
 
@@ -43,7 +43,7 @@ toggleViewBtn.addEventListener("click", () => {
 let isResizing = false;
 
 splitter.addEventListener("mousedown", (e) => {
-    if (webview.classList.contains("hidden")) return; // disable resize when hidden
+    if (webview.classList.contains("hidden")) return;
     isResizing = true;
     document.body.style.cursor = "row-resize";
     e.preventDefault();
@@ -51,10 +51,8 @@ splitter.addEventListener("mousedown", (e) => {
 
 window.addEventListener("mousemove", (e) => {
     if (!isResizing) return;
-
     const newHeight = window.innerHeight - e.clientY;
     const clamped = Math.min(Math.max(newHeight, 60), window.innerHeight * 0.7);
-
     bottomPanel.style.height = clamped + "px";
     bottomPanel.style.flex = "0 0 auto";
 });
@@ -63,11 +61,8 @@ window.addEventListener("mouseup", (e) => {
     if (isResizing) {
         isResizing = false;
         document.body.style.cursor = "";
-
         const newHeight = window.innerHeight - e.clientY;
         const clamped = Math.min(Math.max(newHeight, 60), window.innerHeight * 0.7);
-
-        // Persist last height
         window.electronAPI.send("options:save", { bottomPanelHeight: clamped });
     }
 });
@@ -110,22 +105,72 @@ scanButton.addEventListener("click", async () => {
     statusText.textContent = "Status: Scanning...";
     progressBar.style.width = "0%";
 
-    // Grab hosts from options modal
-    const hostText = document.getElementById("hostList").value;
+    const hostText = document.getElementById("hostList").value || "";
     const validHosts = hostText.split("\n").map(h => h.trim().toLowerCase()).filter(Boolean);
 
-    // Pass host list safely into webview
-    const viewerLinks = await webview.executeJavaScript(`
-        (function(hosts){
-            const regex = new RegExp("(" + hosts.join("|") + ")", "i");
-            return Array.from(document.querySelectorAll("a[href]"))
-                .map(a => a.href)
-                .filter(href => href && regex.test(href));
-        })(${JSON.stringify(validHosts)})
+    console.log("[Renderer] Starting scan. Hosts:", validHosts);
+
+    const rawLinks = await webview.executeJavaScript(`
+        Array.from(document.querySelectorAll("a[href]"))
+            .map(a => a.href)
+            .filter(Boolean)
     `);
 
-    console.log("[Renderer] Found links in page:", viewerLinks.length);
-    window.electronAPI.send("scan-page", viewerLinks);
+    console.log("[Renderer] Raw links found:", rawLinks.length);
+
+    const filteredLinks = validHosts.length > 0
+        ? rawLinks.filter(href => validHosts.some(host => href.toLowerCase().includes(host)))
+        : rawLinks;
+
+    console.log("[Renderer] Filtered links:", filteredLinks.length);
+
+    window.electronAPI.send("scan-page", filteredLinks);
+});
+
+// --- Scan progress ---
+window.electronAPI.receive("scan-progress", (data) => {
+    console.log("[Renderer] scan-progress:", data);
+
+    const allowedExts = Array.from(
+        document.querySelectorAll(".ext-option:checked")
+    ).map(cb => cb.value.toLowerCase());
+
+    const url = data.resolved || data.original;
+    if (!url) return;
+
+    if (!isAllowedExtension(url, allowedExts)) {
+        console.warn("[Renderer] Skipped disallowed file:", url);
+        return;
+    }
+
+    const index = resultsList.children.length + 1;
+    const li = document.createElement("li");
+    li.className = "pending";
+    li.setAttribute("data-index", index);
+
+    li.innerHTML = `
+        <span class="status-icon pending"></span>
+        <a href="${url}" target="_blank">${url}</a>
+    `;
+    resultsList.appendChild(li);
+
+    imagesFound++;
+    imagesFoundText.textContent = "Images found: " + imagesFound;
+
+    if (resultsList.children.length === 1) {
+        downloadBtn.style.display = "inline-block";
+    }
+});
+
+// --- Scan complete ---
+window.electronAPI.receive("scan-complete", () => {
+    cancelBtn.style.display = "none";
+    cancelBtn.disabled = false;
+    if (resultsList.children.length > 0) {
+        statusText.textContent = "Status: Scan complete. Ready to download.";
+    } else {
+        statusText.textContent = "Status: Scan complete — no results found.";
+    }
 });
 
 // --- Options Modal Logic ---
@@ -194,7 +239,8 @@ function deriveSlugFromUrl(url) {
 
 // --- Download Manifest ---
 downloadBtn.addEventListener("click", async () => {
-    console.log("[Renderer] Building download manifest...");
+    console.log("[Renderer] Download button clicked");
+
     downloadBtn.style.display = "none";
     cancelBtn.style.display = "inline-block";
 
@@ -209,7 +255,6 @@ downloadBtn.addEventListener("click", async () => {
     const padWidth = String(items.length).length;
 
     currentManifest = [];
-
     const allowedExts = Array.from(
         document.querySelectorAll(".ext-option:checked")
     ).map(cb => cb.value.toLowerCase());
@@ -224,10 +269,7 @@ downloadBtn.addEventListener("click", async () => {
 
     items.forEach((link) => {
         const url = link.getAttribute("href");
-        if (!isAllowedExtension(url, allowedExts)) {
-            console.log("[Renderer] Skipping disallowed file:", url);
-            return;
-        }
+        if (!isAllowedExtension(url, allowedExts)) return;
 
         const index = currentManifest.length + 1;
         let base = url.split("/").pop().split("?")[0] || "image";
@@ -239,7 +281,6 @@ downloadBtn.addEventListener("click", async () => {
             : `${options.prefix}${base}`;
 
         const savePath = `${folder}/${filename}`;
-
         currentManifest.push({ index, url, status: "pending", filename, savePath });
         link.closest("li").setAttribute("data-index", index);
     });
@@ -293,18 +334,6 @@ window.electronAPI.receive("options:load", (opt) => {
 
 window.electronAPI.receive("options:saved", (saved) => {
     console.log("[Renderer] Options saved:", saved);
-});
-
-// --- IPC: Scan Complete ---
-window.electronAPI.receive("scan-complete", () => {
-    cancelBtn.style.display = "none";
-    cancelBtn.disabled = false;
-    if (resultsList.children.length > 0) {
-        downloadBtn.style.display = "inline-block";
-        statusText.textContent = "Status: Scan complete. Ready to download.";
-    } else {
-        statusText.textContent = "Status: Scan complete — no results found.";
-    }
 });
 
 // --- IPC: Download Progress ---
