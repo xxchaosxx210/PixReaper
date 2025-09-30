@@ -22,26 +22,14 @@ window.electronAPI.receive("choose-folder:result", (folderPath) => {
 
 // --- Toggle Webview Visibility ---
 const toggleViewBtn = document.getElementById("toggleViewBtn");
-let webviewVisible = true;
+const topPanel = document.getElementById("top-panel");
+const splitter = document.getElementById("splitter");
 
 toggleViewBtn.addEventListener("click", () => {
-    if (webviewVisible) {
-        // Hide webview + splitter
-        webview.style.display = "none";
-        document.getElementById("splitter").style.display = "none";
-        // Expand bottom panel
-        document.getElementById("bottom-panel").style.flex = "1 1 auto";
-        toggleViewBtn.textContent = "🖥️ Show View";
-    } else {
-        // Show webview + splitter
-        webview.style.display = "flex";
-        document.getElementById("splitter").style.display = "block";
-        document.getElementById("bottom-panel").style.flex = "1";
-        toggleViewBtn.textContent = "🖥️ Hide View";
-    }
-    webviewVisible = !webviewVisible;
+    const isHidden = topPanel.classList.toggle("hidden");
+    splitter.style.display = isHidden ? "none" : "block"; // hide splitter too
+    toggleViewBtn.textContent = isHidden ? "🖥️ Show View" : "🖥️ Hide View";
 });
-
 
 goButton.addEventListener("click", () => {
     let url = urlInput.value.trim();
@@ -67,14 +55,14 @@ const statusText = document.getElementById("statusText");
 const imagesFoundText = document.getElementById("imageCount");
 const progressBar = document.getElementById("progressBar");
 const downloadBtn = document.getElementById("downloadBtn");
-const cancelBtn = document.getElementById("cancelBtn"); // ✅ new cancel button
+const cancelBtn = document.getElementById("cancelBtn");
 
 // --- Scan ---
 scanButton.addEventListener("click", async () => {
     resultsList.innerHTML = "";
     currentManifest = [];
     downloadBtn.style.display = "none";
-    cancelBtn.style.display = "inline-block"; // ✅ show cancel during scan
+    cancelBtn.style.display = "inline-block";
     imagesFound = 0;
     imagesFoundText.textContent = "Images found: 0";
     statusText.textContent = "Status: Scanning...";
@@ -93,14 +81,13 @@ scanButton.addEventListener("click", async () => {
 window.electronAPI.receive("scan-progress", (data) => {
     console.log("[Renderer] Got scan-progress:", data);
 
-    // ✅ get allowed extensions from checkboxes
     const allowedExts = Array.from(
         document.querySelectorAll(".ext-option:checked")
     ).map(cb => cb.value.toLowerCase());
 
     if (!isAllowedExtension(data.resolved || data.original, allowedExts)) {
         console.warn("[Renderer] Skipped disallowed file:", data.resolved || data.original);
-        return; // ❌ don’t add to results or count
+        return;
     }
 
     const index = resultsList.children.length + 1;
@@ -142,7 +129,6 @@ maxConnections.addEventListener("input", () => {
     maxConnectionsValue.textContent = maxConnections.value;
 });
 saveOptions.addEventListener("click", () => {
-    // ✅ collect selected extensions
     const selectedExts = Array.from(
         document.querySelectorAll(".ext-option:checked")
     ).map(cb => cb.value);
@@ -154,39 +140,34 @@ saveOptions.addEventListener("click", () => {
         indexing: document.querySelector('input[name="indexing"]:checked').value,
         maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
         debugLogging: document.getElementById("debugLogging").checked,
-        validExtensions: selectedExts // ✅ new
+        validExtensions: selectedExts
     };
     console.log("[Renderer] Saving options:", newOptions);
     window.electronAPI.send("options:save", newOptions);
     optionsModal.style.display = "none";
 });
 
-// --- Download Manifest ---
+// --- Helpers ---
 function sanitizeFilename(name) {
     return name.replace(/[<>:"/\\|?*]+/g, "_");
 }
-
-// --- Allowed extensions filter ---
 function isAllowedExtension(url, allowed) {
     if (!url) return false;
     const clean = url.split("?")[0].toLowerCase();
     return allowed.some(ext => clean.endsWith("." + ext.toLowerCase()));
 }
-
-
 function deriveSlugFromUrl(url) {
     try {
         const u = new URL(url);
         let slug = u.pathname.split("/").filter(Boolean).pop();
-        if (!slug || slug.length < 2) {
-            slug = u.hostname.replace(/^www\./, "");
-        }
+        if (!slug || slug.length < 2) slug = u.hostname.replace(/^www\./, "");
         return sanitizeFilename(slug);
     } catch {
         return null;
     }
 }
 
+// --- Download Manifest ---
 downloadBtn.addEventListener("click", async () => {
     console.log("[Renderer] Building download manifest...");
     downloadBtn.style.display = "none";
@@ -194,22 +175,16 @@ downloadBtn.addEventListener("click", async () => {
 
     const options = {
         prefix: document.getElementById("prefix").value.trim(),
-        savePath: document.getElementById("savePath").value.trim(),
+        savePath: document.getElementById("savePath").value.trim() || "PixReaper",
         createSubfolder: document.getElementById("subfolder").checked,
         indexing: document.querySelector('input[name="indexing"]:checked').value,
     };
 
-    if (!options.savePath) {
-        options.savePath = "PixReaper";
-    }
-
     const items = resultsList.querySelectorAll("li a");
-    const total = items.length;
-    const padWidth = String(total).length;
+    const padWidth = String(items.length).length;
 
     currentManifest = [];
 
-    // ✅ get allowed extensions from checkboxes
     const allowedExts = Array.from(
         document.querySelectorAll(".ext-option:checked")
     ).map(cb => cb.value.toLowerCase());
@@ -218,47 +193,29 @@ downloadBtn.addEventListener("click", async () => {
     if (options.createSubfolder) {
         const currentUrl = await webview.getURL();
         let slug = deriveSlugFromUrl(currentUrl);
-        if (!slug) {
-            slug = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-        }
+        if (!slug) slug = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
         folder = `${folder}/${slug}`;
     }
 
-    items.forEach((link, i) => {
+    items.forEach((link) => {
         const url = link.getAttribute("href");
-
-        // ✅ Skip disallowed extensions
         if (!isAllowedExtension(url, allowedExts)) {
             console.log("[Renderer] Skipping disallowed file:", url);
             return;
         }
 
-        const index = currentManifest.length + 1; // ✅ only count kept items
-        let base = url.split("/").pop().split("?")[0];
-        base = sanitizeFilename(base || "image");
+        const index = currentManifest.length + 1;
+        let base = url.split("/").pop().split("?")[0] || "image";
+        base = sanitizeFilename(base);
+        if (!base.includes(".")) base += ".jpg";
 
-        if (!base.includes(".")) {
-            base += ".jpg";
-        }
-
-        let filename = "";
-        if (options.indexing === "order") {
-            const padded = String(index).padStart(padWidth, "0");
-            filename = `${options.prefix}${padded}_${base}`;
-        } else {
-            filename = `${options.prefix}${base}`;
-        }
+        const filename = options.indexing === "order"
+            ? `${options.prefix}${String(index).padStart(padWidth, "0")}_${base}`
+            : `${options.prefix}${base}`;
 
         const savePath = `${folder}/${filename}`;
 
-        currentManifest.push({
-            index,
-            url,
-            status: "pending",
-            filename,
-            savePath,
-        });
-
+        currentManifest.push({ index, url, status: "pending", filename, savePath });
         link.closest("li").setAttribute("data-index", index);
     });
 
@@ -275,7 +232,6 @@ downloadBtn.addEventListener("click", async () => {
         }
     });
 });
-
 
 // --- IPC: Options Load/Save ---
 window.electronAPI.receive("options:load", (opt) => {
@@ -295,7 +251,6 @@ window.electronAPI.receive("options:load", (opt) => {
 
     document.getElementById("debugLogging").checked = !!opt.debugLogging;
 
-    // ✅ Restore validExtensions checkboxes
     const allowed = opt.validExtensions ?? ["jpg", "jpeg"];
     document.querySelectorAll(".ext-option").forEach(cb => {
         cb.checked = allowed.includes(cb.value);
@@ -308,7 +263,7 @@ window.electronAPI.receive("options:saved", (saved) => {
 
 // --- IPC: Scan Complete ---
 window.electronAPI.receive("scan-complete", () => {
-    cancelBtn.style.display = "none"; // ✅ hide cancel after scan
+    cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
     if (resultsList.children.length > 0) {
         downloadBtn.style.display = "inline-block";
@@ -320,17 +275,14 @@ window.electronAPI.receive("scan-complete", () => {
 
 // --- IPC: Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
-    downloadCompleted = currentManifest.filter((e) => e.status === "success").length;
+    downloadCompleted = currentManifest.filter(e => e.status === "success").length;
     const percent = ((downloadCompleted / downloadTotal) * 100).toFixed(1);
     statusText.textContent = `Status: Downloading (${downloadCompleted}/${downloadTotal}) — ${percent}%`;
     progressBar.style.width = `${percent}%`;
 
     const { index, status, savePath } = data;
-    const entry = currentManifest.find((e) => e.index === index);
-    if (entry) {
-        entry.status = status;
-        entry.savePath = savePath;
-    }
+    const entry = currentManifest.find(e => e.index === index);
+    if (entry) entry.status = status;
 
     const li = resultsList.querySelector(`li[data-index="${index}"]`);
     if (li) {
@@ -340,20 +292,19 @@ window.electronAPI.receive("download:progress", (data) => {
         const link = li.querySelector("a");
         if (link) {
             if (status === "success") {
-                const fileUrl = "file:///" + savePath.replace(/\\/g, "/");
                 link.textContent = savePath;
-                link.setAttribute("href", fileUrl);
-                link.setAttribute("target", "_blank");
-                link.style.color = ""; // reset any red coloring
+                link.href = "file:///" + savePath.replace(/\\/g, "/");
+                link.target = "_blank";
+                link.style.color = "";
             } else if (status === "retrying") {
                 link.textContent = "Retrying download...";
                 link.removeAttribute("href");
                 link.style.color = "orange";
             } else if (status === "failed") {
                 link.textContent = "Failed (click to inspect): " + (entry.url || link.textContent);
-                link.setAttribute("href", entry.url);   // ✅ keep original URL
-                link.setAttribute("target", "_blank");
-                link.style.color = "red";               // ✅ make failed obvious
+                link.href = entry.url;
+                link.target = "_blank";
+                link.style.color = "red";
             } else if (status === "cancelled") {
                 link.textContent = "Cancelled: " + (entry.url || link.textContent);
                 link.removeAttribute("href");
@@ -366,7 +317,7 @@ window.electronAPI.receive("download:progress", (data) => {
 // --- IPC: Download Complete ---
 window.electronAPI.receive("download:complete", () => {
     console.log("[Renderer] All downloads complete.");
-    cancelBtn.style.display = "none"; // ✅ hide cancel after download
+    cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
     statusText.textContent = "Status: All downloads complete.";
     progressBar.style.width = "100%";

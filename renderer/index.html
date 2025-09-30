@@ -13,32 +13,32 @@
             <input type="text" id="urlInput" placeholder="Enter URL..." />
             <button id="goBtn">Go</button>
             <button id="scanBtn">Scan Page</button>
-            <button id="toggleViewBtn">👁 Hide View</button> <!-- ✅ new -->
+            <button id="toggleViewBtn">👁 Hide View</button>
             <button id="optionsBtn">⚙️ Options</button>
         </div>
 
         <webview id="browserView" src="http://vintage-erotica-forum.com/t10913-p14-tanya-prime.html" allowpopups>
         </webview>
+
+        <!-- ✅ Status Bar now inside top-panel -->
+        <div id="status-bar">
+            <span id="statusText">Status: Ready</span>
+            <span id="imageCount">Images found: 0</span>
+            <div class="status-buttons">
+                <button id="downloadBtn" style="display:none;">⬇ Download</button>
+                <button id="cancelBtn" style="display:none;" class="cancel">✖ Cancel</button>
+            </div>
+        </div>
+
+        <!-- ✅ Progress Bar inside top-panel too -->
+        <div id="progressContainer">
+            <div id="progressBar"></div>
+        </div>
     </div>
 
     <div id="splitter"></div>
 
-    <!-- ✅ Status Bar -->
-    <div id="status-bar">
-        <span id="statusText">Status: Ready</span>
-        <span id="imageCount">Images found: 0</span>
-        <div class="status-buttons">
-            <button id="downloadBtn" style="display:none;">⬇ Download</button>
-            <button id="cancelBtn" style="display:none;" class="cancel">✖ Cancel</button>
-        </div>
-    </div>
-
-    <!-- ✅ Progress Bar -->
-    <div id="progressContainer">
-        <div id="progressBar"></div>
-    </div>
-
-
+    <!-- Results panel will now expand correctly -->
     <div id="bottom-panel">
         <ul id="results"></ul>
     </div>
@@ -63,14 +63,13 @@
                 <label><input type="radio" name="indexing" value="none" /> None</label>
             </div>
 
-            <!-- ✅ clarified subfolder label -->
             <label><input type="checkbox" id="subfolder" /> Create subfolder per download (URL slug or
                 timestamp)</label>
 
             <label for="maxConnections">Max connections:</label>
             <input type="range" id="maxConnections" min="1" max="50" value="10" />
             <span id="maxConnectionsValue">10</span>
-            <!-- ✅ NEW: Allowed file extensions -->
+
             <h3>Allowed File Extensions</h3>
             <div id="ext-options" class="ext-options">
                 <label><input type="checkbox" class="ext-option" value="jpg" checked> JPG</label>
@@ -84,14 +83,12 @@
 
             <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
 
-
             <div class="modal-buttons">
                 <button id="cancelOptions">Cancel</button>
                 <button id="saveOptions">Save</button>
             </div>
         </div>
     </div>
-
 
     <script src="renderer.js"></script>
 </body>
