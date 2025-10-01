@@ -47,14 +47,15 @@ app.whenReady().then(() => {
         mainWindow.webContents.send("options:load", saved);
     });
 
-    // IPC: reset options
+    // IPC: reset options to defaults
     ipcMain.on("options:reset", (event) => {
         const defaults = optionsManager.getDefaultOptions();
         const saved = optionsManager.saveOptions(defaults);
         setDebug(!!saved.debugLogging);
         event.sender.send("options:saved", saved);
-        mainWindow.webContents.send("options:load", saved);
+        mainWindow.webContents.send("options:load", saved); // refresh UI
     });
+
 
     // IPC: start downloads
     ipcMain.on("download:start", async (event, { manifest, options }) => {

@@ -80,30 +80,35 @@ webview.addEventListener("did-navigate", (event) => {
     urlInput.value = event.url;
 });
 
-// --- Results List ---
+// --- Results / State ---
 const resultsList = document.getElementById("results");
 let currentManifest = [];
 let imagesFound = 0;
 let downloadTotal = 0;
 let downloadCompleted = 0;
 
-// --- Status Bar Elements ---
 const statusText = document.getElementById("statusText");
 const imagesFoundText = document.getElementById("imageCount");
 const progressBar = document.getElementById("progressBar");
 const downloadBtn = document.getElementById("downloadBtn");
 const cancelBtn = document.getElementById("cancelBtn");
 
-// --- Scan ---
-scanButton.addEventListener("click", async () => {
+function resetScanState() {
     resultsList.innerHTML = "";
     currentManifest = [];
-    downloadBtn.style.display = "none";
-    cancelBtn.style.display = "inline-block";
     imagesFound = 0;
     imagesFoundText.textContent = "Images found: 0";
-    statusText.textContent = "Status: Scanning...";
+    statusText.textContent = "Status: Ready";
     progressBar.style.width = "0%";
+    downloadBtn.style.display = "none";
+    cancelBtn.style.display = "none";
+}
+
+// --- Scan ---
+scanButton.addEventListener("click", async () => {
+    resetScanState();
+    cancelBtn.style.display = "inline-block";
+    statusText.textContent = "Status: Scanning...";
 
     const hostText = document.getElementById("hostList").value || "";
     const validHosts = hostText.split("\n").map(h => h.trim().toLowerCase()).filter(Boolean);
@@ -118,6 +123,7 @@ scanButton.addEventListener("click", async () => {
 
     console.log("[Renderer] Raw links found:", rawLinks.length);
 
+    // 🔑 Change: if no hosts defined, block all instead of allowing all
     const filteredLinks = validHosts.length > 0
         ? rawLinks.filter(href => validHosts.some(host => href.toLowerCase().includes(host)))
         : [];
@@ -136,30 +142,17 @@ window.electronAPI.receive("scan-progress", (data) => {
     ).map(cb => cb.value.toLowerCase());
 
     const url = data.resolved || data.original;
-    if (!url) return;
-
-    if (!isAllowedExtension(url, allowedExts)) {
-        console.warn("[Renderer] Skipped disallowed file:", url);
-        return;
-    }
+    if (!url || !isAllowedExtension(url, allowedExts)) return;
 
     const index = resultsList.children.length + 1;
     const li = document.createElement("li");
     li.className = "pending";
     li.setAttribute("data-index", index);
-
-    li.innerHTML = `
-        <span class="status-icon pending"></span>
-        <a href="${url}" target="_blank">${url}</a>
-    `;
+    li.innerHTML = `<span class="status-icon pending"></span><a href="${url}" target="_blank">${url}</a>`;
     resultsList.appendChild(li);
 
     imagesFound++;
-    imagesFoundText.textContent = "Images found: " + imagesFound;
-
-    if (resultsList.children.length === 1) {
-        downloadBtn.style.display = "inline-block";
-    }
+    imagesFoundText.textContent = `Images found: ${imagesFound}`;
 });
 
 // --- Scan complete ---
@@ -168,30 +161,28 @@ window.electronAPI.receive("scan-complete", () => {
     cancelBtn.disabled = false;
     if (resultsList.children.length > 0) {
         statusText.textContent = "Status: Scan complete. Ready to download.";
+        downloadBtn.style.display = "inline-block"; // ✅ ensure visible
     } else {
         statusText.textContent = "Status: Scan complete — no results found.";
     }
 });
 
-// --- Options Modal Logic ---
+// --- Options Modal ---
 const optionsModal = document.getElementById("optionsModal");
 const optionsButton = document.getElementById("optionsBtn");
 const cancelOptions = document.getElementById("cancelOptions");
 const saveOptions = document.getElementById("saveOptions");
-const resetOptions = document.getElementById("resetOptions"); // NEW
+const resetOptions = document.getElementById("resetOptions"); // ✅ reset button
 const maxConnections = document.getElementById("maxConnections");
 const maxConnectionsValue = document.getElementById("maxConnectionsValue");
 
-optionsButton.addEventListener("click", () => {
-    optionsModal.style.display = "block";
-});
-cancelOptions.addEventListener("click", () => {
-    optionsModal.style.display = "none";
-});
+optionsButton.addEventListener("click", () => optionsModal.style.display = "block");
+cancelOptions.addEventListener("click", () => optionsModal.style.display = "none");
 maxConnections.addEventListener("input", () => {
     maxConnectionsValue.textContent = maxConnections.value;
 });
 
+// Save Options
 saveOptions.addEventListener("click", () => {
     const selectedExts = Array.from(
         document.querySelectorAll(".ext-option:checked")
@@ -207,7 +198,7 @@ saveOptions.addEventListener("click", () => {
         savePath: document.getElementById("savePath").value.trim(),
         createSubfolder: document.getElementById("subfolder").checked,
         indexing: document.querySelector('input[name="indexing"]:checked').value,
-        maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
+        maxConnections: parseInt(maxConnections.value, 10),
         debugLogging: document.getElementById("debugLogging").checked,
         validExtensions: selectedExts,
         validHosts: hostList,
@@ -218,7 +209,7 @@ saveOptions.addEventListener("click", () => {
     optionsModal.style.display = "none";
 });
 
-// --- Reset Defaults ---
+// Reset Options to defaults
 resetOptions.addEventListener("click", () => {
     console.log("[Renderer] Resetting options to defaults");
     window.electronAPI.send("options:reset");
@@ -247,7 +238,6 @@ function deriveSlugFromUrl(url) {
 // --- Download Manifest ---
 downloadBtn.addEventListener("click", async () => {
     console.log("[Renderer] Download button clicked");
-
     downloadBtn.style.display = "none";
     cancelBtn.style.display = "inline-block";
 
@@ -318,9 +308,8 @@ window.electronAPI.receive("options:load", (opt) => {
         radio.checked = radio.value === indexing;
     });
 
-    const slider = document.getElementById("maxConnections");
-    slider.value = opt.maxConnections ?? 10;
-    maxConnectionsValue.textContent = slider.value;
+    maxConnections.value = opt.maxConnections ?? 10;
+    maxConnectionsValue.textContent = maxConnections.value;
 
     document.getElementById("debugLogging").checked = !!opt.debugLogging;
 
@@ -329,10 +318,8 @@ window.electronAPI.receive("options:load", (opt) => {
         cb.checked = allowed.includes(cb.value);
     });
 
-    // Restore host list
     document.getElementById("hostList").value = (opt.validHosts ?? []).join("\n");
 
-    // Restore saved bottom panel height if available
     if (opt.bottomPanelHeight) {
         bottomPanel.style.height = opt.bottomPanelHeight + "px";
         bottomPanel.style.flex = "0 0 auto";
@@ -371,7 +358,7 @@ window.electronAPI.receive("download:progress", (data) => {
                 link.removeAttribute("href");
                 link.style.color = "orange";
             } else if (status === "failed") {
-                link.textContent = "Failed (click to inspect): " + (entry.url || link.textContent);
+                link.textContent = "Failed: " + (entry.url || link.textContent);
                 link.href = entry.url;
                 link.target = "_blank";
                 link.style.color = "red";
