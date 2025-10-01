@@ -95,9 +95,11 @@ File: C:\Users\chaos\Documents\dev\PixReaper\renderer\index.html
             <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
 
             <div class="modal-buttons">
+                <button id="resetOptions">Reset to Defaults</button>
                 <button id="cancelOptions">Cancel</button>
                 <button id="saveOptions">Save</button>
             </div>
+
         </div>
     </div>
 

@@ -110,15 +110,6 @@ scanButton.addEventListener("click", async () => {
 
     console.log("[Renderer] Starting scan. Hosts:", validHosts);
 
-    // 🚨 If no hosts configured, stop immediately
-    if (validHosts.length === 0) {
-        console.warn("[Renderer] No valid hosts configured. Aborting scan.");
-        statusText.textContent = "Status: No hosts configured — nothing to scan.";
-        window.electronAPI.send("scan-page", []); // send empty so main stops
-        return;
-    }
-
-    // Collect raw links from webview
     const rawLinks = await webview.executeJavaScript(`
         Array.from(document.querySelectorAll("a[href]"))
             .map(a => a.href)
@@ -127,17 +118,11 @@ scanButton.addEventListener("click", async () => {
 
     console.log("[Renderer] Raw links found:", rawLinks.length);
 
-    // Filter strictly by configured hosts
-    const filteredLinks = rawLinks.filter(href =>
-        validHosts.some(host => href.toLowerCase().includes(host))
-    );
+    const filteredLinks = validHosts.length > 0
+        ? rawLinks.filter(href => validHosts.some(host => href.toLowerCase().includes(host)))
+        : [];
 
     console.log("[Renderer] Filtered links:", filteredLinks.length);
-    if (filteredLinks.length === 0) {
-        statusText.textContent = "Status: No matching links found for configured hosts.";
-        window.electronAPI.send("scan-page", []);
-        return;
-    }
 
     window.electronAPI.send("scan-page", filteredLinks);
 });
@@ -193,6 +178,7 @@ const optionsModal = document.getElementById("optionsModal");
 const optionsButton = document.getElementById("optionsBtn");
 const cancelOptions = document.getElementById("cancelOptions");
 const saveOptions = document.getElementById("saveOptions");
+const resetOptions = document.getElementById("resetOptions"); // NEW
 const maxConnections = document.getElementById("maxConnections");
 const maxConnectionsValue = document.getElementById("maxConnectionsValue");
 
@@ -230,6 +216,12 @@ saveOptions.addEventListener("click", () => {
     console.log("[Renderer] Saving options:", newOptions);
     window.electronAPI.send("options:save", newOptions);
     optionsModal.style.display = "none";
+});
+
+// --- Reset Defaults ---
+resetOptions.addEventListener("click", () => {
+    console.log("[Renderer] Resetting options to defaults");
+    window.electronAPI.send("options:reset");
 });
 
 // --- Helpers ---

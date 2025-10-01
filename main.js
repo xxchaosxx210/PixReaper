@@ -1,7 +1,8 @@
 /* main.js */
+
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
-const { resolveLink, isSupportedHost } = require("./logic/hostResolver");
+const { resolveLink } = require("./logic/hostResolver");
 const { logDebug, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
@@ -18,22 +19,16 @@ function createWindow() {
             preload: path.join(__dirname, "preload.js"),
             contextIsolation: true,
             nodeIntegration: false,
-            webviewTag: true, // ✅ enable <webview>
+            webviewTag: true,
         },
     });
 
     mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 
-    // When the renderer has loaded, send current options
     mainWindow.webContents.on("did-finish-load", () => {
         const currentOptions = optionsManager.loadOptions();
         setDebug(!!currentOptions.debugLogging);
         mainWindow.webContents.send("options:load", currentOptions);
-    });
-
-    // Debug: catch load errors
-    mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
-        console.error("[Main] did-fail-load:", code, desc, url);
     });
 
     mainWindow.on("closed", () => {
@@ -44,12 +39,21 @@ function createWindow() {
 app.whenReady().then(() => {
     createWindow();
 
-    // IPC: save options from renderer
+    // IPC: save options
     ipcMain.on("options:save", (event, newOptions) => {
         const saved = optionsManager.saveOptions(newOptions);
-        setDebug(!!saved.debugLogging); // ✅ update logger
+        setDebug(!!saved.debugLogging);
         event.sender.send("options:saved", saved);
-        mainWindow.webContents.send("options:load", saved); // push latest back to renderer
+        mainWindow.webContents.send("options:load", saved);
+    });
+
+    // IPC: reset options
+    ipcMain.on("options:reset", (event) => {
+        const defaults = optionsManager.getDefaultOptions();
+        const saved = optionsManager.saveOptions(defaults);
+        setDebug(!!saved.debugLogging);
+        event.sender.send("options:saved", saved);
+        mainWindow.webContents.send("options:load", saved);
     });
 
     // IPC: start downloads
@@ -67,14 +71,9 @@ app.whenReady().then(() => {
                         event.sender.send("download:complete");
                         return;
                     }
-
-                    event.sender.send("download:progress", {
-                        index,
-                        status,
-                        savePath,
-                    });
+                    event.sender.send("download:progress", { index, status, savePath });
                 },
-                () => cancelDownload // ✅ pass cancel flag callback
+                () => cancelDownload
             );
 
             if (!cancelDownload) {
@@ -87,7 +86,7 @@ app.whenReady().then(() => {
     });
 
     // IPC: cancel download
-    ipcMain.on("download:cancel", (event) => {
+    ipcMain.on("download:cancel", () => {
         logDebug("[Main] Cancelling downloads...");
         cancelDownload = true;
     });
@@ -104,74 +103,34 @@ app.whenReady().then(() => {
             event.sender.send("choose-folder:result", null);
         }
     });
+
+    // IPC: scan page
+    const CONCURRENCY = 8;
+    ipcMain.on("scan-page", async (event, links) => {
+        logDebug("[Main] Received links:", links.length);
+        cancelScan = false;
+
+        for (let i = 0; i < links.length; i++) {
+            if (cancelScan) break;
+            const href = links[i];
+            try {
+                const resolved = await resolveLink(href);
+                event.sender.send("scan-progress", { original: href, resolved });
+            } catch (err) {
+                logError("[Main] Resolver failed for:", href, err);
+            }
+        }
+
+        event.sender.send("scan-complete");
+    });
+
+    ipcMain.on("scan:cancel", () => {
+        cancelScan = true;
+    });
 });
 
 app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
         app.quit();
     }
-});
-
-app.on("activate", () => {
-    if (mainWindow === null) {
-        createWindow();
-    }
-});
-
-// --- IPC: Scan Page ---
-const CONCURRENCY = 8;
-
-ipcMain.on("scan-page", async (event, links) => {
-    logDebug("[Main] Received links:", links.length);
-    cancelScan = false;
-
-    // ✅ filter unsupported hosts here
-    const supported = links.filter(link => isSupportedHost(link));
-    logDebug("[Main] Supported links:", supported.length);
-
-    for (let i = 0; i < supported.length; i += CONCURRENCY) {
-        if (cancelScan) {
-            logDebug("[Main] Scan cancelled.");
-            event.sender.send("scan-complete");
-            return;
-        }
-
-        const batch = supported.slice(i, i + CONCURRENCY);
-
-        await Promise.all(
-            batch.map(async (link) => {
-                if (cancelScan) return;
-                try {
-                    const resolved = await resolveLink(link);
-                    if (!cancelScan) {
-                        event.sender.send("scan-progress", {
-                            original: link,
-                            resolved,
-                            status: resolved ? "success" : "failed",
-                        });
-                        logDebug("[Main] Resolved:", link, "->", resolved);
-                    }
-                } catch (err) {
-                    logError("[Main] Resolver error for:", link, err);
-                    if (!cancelScan) {
-                        event.sender.send("scan-progress", {
-                            original: link,
-                            resolved: null,
-                            status: "failed",
-                        });
-                    }
-                }
-            })
-        );
-    }
-
-    if (!cancelScan) {
-        event.sender.send("scan-complete");
-    }
-});
-
-// IPC: cancel scan
-ipcMain.on("scan:cancel", (event) => {
-    logDebug("[Main] Cancelling scan...");
-    cancelScan = true;
 });
