@@ -1,20 +1,28 @@
 {
   "prefix": "",
-  "savePath": "C:\\Users\\chaos\\Downloads\\",
+  "savePath": "C:\\Users\\chaos\\Downloads\\PixReaper",
   "createSubfolder": true,
   "maxConnections": 10,
   "indexing": "order",
-  "debugLogging": true,
+  "debugLogging": false,
   "validExtensions": [
     "jpg",
     "jpeg"
   ],
   "validHosts": [
-    "imagebam",
-    "imgbox",
-    "pixhost",
-    "imagevenue",
-    "pimpandhost"
+    "pixhost.to",
+    "imagebam.com",
+    "imagevenue.com",
+    "imgbox.com",
+    "pimpandhost.com",
+    "postimg.cc",
+    "turboimagehost.com",
+    "fastpic.org",
+    "fastpic.ru",
+    "imagetwist.com",
+    "imgview.net",
+    "radikal.ru",
+    "imageupper.com"
   ],
   "bottomPanelHeight": null
 }

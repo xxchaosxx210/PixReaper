@@ -110,6 +110,15 @@ scanButton.addEventListener("click", async () => {
 
     console.log("[Renderer] Starting scan. Hosts:", validHosts);
 
+    // 🚨 If no hosts configured, stop immediately
+    if (validHosts.length === 0) {
+        console.warn("[Renderer] No valid hosts configured. Aborting scan.");
+        statusText.textContent = "Status: No hosts configured — nothing to scan.";
+        window.electronAPI.send("scan-page", []); // send empty so main stops
+        return;
+    }
+
+    // Collect raw links from webview
     const rawLinks = await webview.executeJavaScript(`
         Array.from(document.querySelectorAll("a[href]"))
             .map(a => a.href)
@@ -118,11 +127,17 @@ scanButton.addEventListener("click", async () => {
 
     console.log("[Renderer] Raw links found:", rawLinks.length);
 
-    const filteredLinks = validHosts.length > 0
-        ? rawLinks.filter(href => validHosts.some(host => href.toLowerCase().includes(host)))
-        : rawLinks;
+    // Filter strictly by configured hosts
+    const filteredLinks = rawLinks.filter(href =>
+        validHosts.some(host => href.toLowerCase().includes(host))
+    );
 
     console.log("[Renderer] Filtered links:", filteredLinks.length);
+    if (filteredLinks.length === 0) {
+        statusText.textContent = "Status: No matching links found for configured hosts.";
+        window.electronAPI.send("scan-page", []);
+        return;
+    }
 
     window.electronAPI.send("scan-page", filteredLinks);
 });
