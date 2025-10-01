@@ -48,12 +48,13 @@ app.whenReady().then(() => {
     });
 
     // IPC: reset options to defaults
+    const { getDefaultOptions, saveOptions } = require("./config/optionsManager");
+
     ipcMain.on("options:reset", (event) => {
-        const defaults = optionsManager.getDefaultOptions();
-        const saved = optionsManager.saveOptions(defaults);
-        setDebug(!!saved.debugLogging);
+        const defaults = getDefaultOptions();
+        const saved = saveOptions(defaults);
         event.sender.send("options:saved", saved);
-        mainWindow.webContents.send("options:load", saved); // refresh UI
+        mainWindow.webContents.send("options:load", saved);
     });
 
 
