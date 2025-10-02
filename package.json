@@ -10,7 +10,8 @@
     "build": {
         "appId": "com.chaosad.pixreaper",
         "win": {
-            "target": "nsis"
+            "target": "nsis",
+            "icon": "build/icon.ico"
         }
     },
     "author": "chaosAD",

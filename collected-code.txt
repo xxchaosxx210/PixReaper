@@ -185,7 +185,7 @@ body {
     align-items: center;
     gap: 8px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-    transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    transition: border-left-color 0.3s ease, background 0.2s ease, transform 0.1s ease;
 }
 
 #results li:hover {
@@ -195,14 +195,18 @@ body {
 }
 
 #results li a {
-    color: #1976d2;
+    flex: 1;
+    color: #333;
     text-decoration: none;
     font-weight: 500;
-    word-break: break-all;
-    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    transition: color 0.2s ease, text-decoration 0.2s ease;
 }
 
 #results li a:hover {
+    color: #2196f3;
     text-decoration: underline;
 }
 
@@ -256,6 +260,15 @@ body {
 #results li.cancelled .status-icon::before {
     content: "ðŸš«";
     color: #757575;
+}
+
+#results li.ready {
+    border-left-color: #2196f3;
+}
+
+#results li.ready .status-icon::before {
+    content: "ðŸ”—";
+    color: #2196f3;
 }
 
 /* Status Bar */
@@ -339,7 +352,7 @@ body {
 .modal-content {
     background: white;
     margin: 50px auto;
-    padding: 20px;
+    padding: 24px;
     width: 500px;
     max-height: 80%;
     overflow-y: auto;
@@ -348,14 +361,41 @@ body {
 
 .modal-content h2 {
     margin-top: 0;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 8px;
+}
+
+/* Inputs + controls neatly aligned */
+.modal-content label {
+    display: block;
+    font-weight: bold;
+    margin: 10px 0 6px;
 }
 
 .modal-content input[type="text"],
 .modal-content input[type="range"],
-.modal-content textarea {
+.modal-content textarea,
+.modal-content select {
     width: 100%;
+    padding: 6px 8px;
     margin-bottom: 14px;
-    /* more spacing between controls */
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+/* Checkbox/Radio groups inline with label */
+.modal-content .form-group {
+    margin-bottom: 14px;
+}
+
+.modal-content .form-group label {
+    font-weight: normal;
+    margin: 0 8px 0 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 /* Modal Actions */
@@ -363,7 +403,7 @@ body {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    margin-top: 16px;
+    margin-top: 20px;
 }
 
 .modal-actions button {
@@ -418,14 +458,15 @@ button.danger:hover {
 .ext-options {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 6px;
-    margin-bottom: 14px;
+    gap: 10px;
+    margin-bottom: 16px;
 }
 
 /* Host List box bigger */
 #hostList {
     min-height: 120px;
     resize: vertical;
+    margin-bottom: 16px;
 }
 
 
