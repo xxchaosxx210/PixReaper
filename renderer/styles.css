@@ -87,16 +87,25 @@ body {
 }
 
 #results li a {
-    color: #1976d2;
-    text-decoration: none;
-    font-weight: 500;
-    word-break: break-all;
     flex: 1;
+    color: #333;
+    /* subtle dark gray instead of bright blue */
+    text-decoration: none;
+    /* no underline by default */
+    font-weight: 500;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    /* truncate long URLs nicely */
+    transition: color 0.2s ease, text-decoration 0.2s ease;
 }
 
 #results li a:hover {
+    color: #2196f3;
+    /* soft blue on hover */
     text-decoration: underline;
 }
+
 
 /* Status Icons */
 .status-icon {
