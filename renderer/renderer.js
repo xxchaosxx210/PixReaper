@@ -173,81 +173,12 @@ window.electronAPI.receive("scan-complete", () => {
     }
 });
 
-// --- Download Button ---
-downloadBtn.addEventListener("click", async () => {
-    console.log("[Renderer] Download button clicked");
-
-    downloadBtn.style.display = "none";
-    cancelBtn.style.display = "inline-block";
-
-    const options = {
-        prefix: document.getElementById("prefix").value.trim(),
-        savePath: document.getElementById("savePath").value.trim() || "PixReaper",
-        createSubfolder: document.getElementById("subfolder").checked,
-        indexing: document.querySelector('input[name="indexing"]:checked').value,
-    };
-
-    const items = resultsList.querySelectorAll("li a");
-    const padWidth = String(items.length).length;
-
-    currentManifest = [];
-    const allowedExts = Array.from(
-        document.querySelectorAll(".ext-option:checked")
-    ).map(cb => cb.value.toLowerCase());
-
-    let folder = options.savePath;
-    if (options.createSubfolder) {
-        const currentUrl = await webview.getURL();
-        let slug = deriveSlugFromUrl(currentUrl);
-        if (!slug) slug = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-        folder = `${folder}/${slug}`;
-    }
-
-    items.forEach((link) => {
-        const url = link.getAttribute("href");
-        if (!isAllowedExtension(url, allowedExts)) return;
-
-        const index = currentManifest.length + 1;
-        let base = url.split("/").pop().split("?")[0] || "image";
-        base = sanitizeFilename(base);
-        if (!base.includes(".")) base += ".jpg";
-
-        const filename = options.indexing === "order"
-            ? `${options.prefix}${String(index).padStart(padWidth, "0")}_${base}`
-            : `${options.prefix}${base}`;
-
-        const savePath = `${folder}/${filename}`;
-        currentManifest.push({ index, url, status: "pending", filename, savePath });
-        link.closest("li").setAttribute("data-index", index);
-    });
-
-    downloadTotal = currentManifest.length;
-    downloadCompleted = 0;
-    statusText.textContent = `Status: Downloading (0/${downloadTotal}) — 0%`;
-    progressBar.style.width = "0%";
-
-    window.electronAPI.send("download:start", {
-        manifest: currentManifest,
-        options: {
-            ...options,
-            debugLogging: document.getElementById("debugLogging").checked
-        }
-    });
-});
-
-// --- Cancel Button ---
-cancelBtn.addEventListener("click", () => {
-    console.log("[Renderer] Cancel button clicked");
-    window.electronAPI.send("download:cancel");
-    cancelBtn.disabled = true;
-    statusText.textContent = "Status: Cancelling...";
-});
-
 // --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
 const optionsButton = document.getElementById("optionsBtn");
 const cancelOptions = document.getElementById("cancelOptions");
 const saveOptions = document.getElementById("saveOptions");
+const resetOptions = document.getElementById("resetOptions");
 const maxConnections = document.getElementById("maxConnections");
 const maxConnectionsValue = document.getElementById("maxConnectionsValue");
 
@@ -287,6 +218,15 @@ saveOptions.addEventListener("click", () => {
     optionsModal.style.display = "none";
 });
 
+// --- Reset Options ---
+resetOptions.addEventListener("click", () => {
+    if (!confirm("Are you sure you want to reset all options to defaults?")) {
+        return;
+    }
+    console.log("[Renderer] Resetting options to defaults...");
+    window.electronAPI.send("options:reset");
+});
+
 // --- Helpers ---
 function sanitizeFilename(name) {
     return name.replace(/[<>:"/\\|?*]+/g, "_");
@@ -306,6 +246,68 @@ function deriveSlugFromUrl(url) {
         return null;
     }
 }
+
+// --- Download Manifest ---
+downloadBtn.addEventListener("click", async () => {
+    console.log("[Renderer] Download button clicked");
+
+    downloadBtn.style.display = "none";
+    cancelBtn.style.display = "inline-block";
+
+    const options = {
+        prefix: document.getElementById("prefix").value.trim(),
+        savePath: document.getElementById("savePath").value.trim() || "PixReaper",
+        createSubfolder: document.getElementById("subfolder").checked,
+        indexing: document.querySelector('input[name="indexing"]:checked').value,
+    };
+
+    const items = resultsList.querySelectorAll("li a");
+    const padWidth = String(items.length).length;
+
+    currentManifest = [];
+    const allowedExts = Array.from(
+        document.querySelectorAll(".ext-option:checked")
+    ).map(cb => cb.value.toLowerCase());
+
+    let folder = options.savePath;
+    if (options.createSubfolder) {
+        const currentUrl = await webview.getURL();
+        let slug = deriveSlugFromUrl(currentUrl);
+        if (!slug) slug = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+        folder = `${folder}/${slug}`;
+    }
+
+    items.forEach((link) => {
+        const url = link.getAttribute("href");
+        if (!isAllowedExtension(url, allowedExts)) return;
+
+        const index = currentManifest.length + 1;
+        let base = url.split("/").pop().split("?")[0] || "image";
+        base = sanitizeFilename(base);
+        if (!base.includes(".")) base += ".jpg"; // ✅ fixed here
+
+        const filename = options.indexing === "order"
+            ? `${options.prefix}${String(index).padStart(padWidth, "0")}_${base}`
+            : `${options.prefix}${base}`;
+
+        const savePath = `${folder}/${filename}`;
+        currentManifest.push({ index, url, status: "pending", filename, savePath });
+        link.closest("li").setAttribute("data-index", index);
+    });
+
+    downloadTotal = currentManifest.length;
+    downloadCompleted = 0;
+    statusText.textContent = `Status: Downloading (0/${downloadTotal}) — 0%`;
+    progressBar.style.width = "0%";
+
+    window.electronAPI.send("download:start", {
+        manifest: currentManifest,
+        options: {
+            ...options,
+            debugLogging: document.getElementById("debugLogging").checked
+        }
+    });
+});
 
 // --- IPC: Options Load/Save ---
 window.electronAPI.receive("options:load", (opt) => {
@@ -330,10 +332,8 @@ window.electronAPI.receive("options:load", (opt) => {
         cb.checked = allowed.includes(cb.value);
     });
 
-    // Restore host list
     document.getElementById("hostList").value = (opt.validHosts ?? []).join("\n");
 
-    // Restore saved bottom panel height if available
     if (opt.bottomPanelHeight) {
         bottomPanel.style.height = opt.bottomPanelHeight + "px";
         bottomPanel.style.flex = "0 0 auto";
