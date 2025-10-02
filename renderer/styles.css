@@ -150,6 +150,17 @@ body {
     color: #757575;
 }
 
+#results li.ready {
+    border-left-color: #2196f3;
+    /* blue for ready */
+}
+
+#results li.ready .status-icon::before {
+    content: "🔗";
+    color: #2196f3;
+}
+
+
 /* Status Bar */
 #status-bar {
     display: flex;

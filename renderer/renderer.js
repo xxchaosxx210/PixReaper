@@ -166,12 +166,20 @@ window.electronAPI.receive("scan-progress", (data) => {
 window.electronAPI.receive("scan-complete", () => {
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
+
+    // Update UI
     if (resultsList.children.length > 0) {
         statusText.textContent = "Status: Scan complete. Ready to download.";
+
+        // change all pending scan results to 'ready'
+        resultsList.querySelectorAll("li.pending").forEach(li => {
+            li.className = "ready";
+        });
     } else {
         statusText.textContent = "Status: Scan complete — no results found.";
     }
 });
+
 
 // --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
