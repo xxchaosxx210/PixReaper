@@ -217,7 +217,6 @@ body {
     display: none;
 }
 
-
 /* Progress Bar */
 #progressContainer {
     height: 4px;
@@ -254,54 +253,90 @@ body {
     border-radius: 6px;
 }
 
+/* Add spacing for labels & controls */
 .modal-content h2 {
     margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.modal-content label {
+    display: block;
+    font-weight: 500;
+    margin: 14px 0 6px;
 }
 
 .modal-content input[type="text"],
 .modal-content input[type="range"],
-.modal-content textarea {
+.modal-content textarea,
+.modal-content select {
     width: 100%;
-    margin-bottom: 10px;
+    margin-bottom: 14px;
+    padding: 6px;
 }
 
+/* Modal Actions */
 .modal-actions {
     display: flex;
-    gap: 8px;
-    margin-top: 12px;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-actions button {
+    flex: 1;
+    /* equal width for all buttons */
+    padding: 12px 18px;
+    font-size: 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+}
+
+.modal-actions button:hover {
+    opacity: 0.9;
+}
+
+.modal-actions button:active {
+    transform: scale(0.97);
+}
+
+/* Specific modal button styles */
+button.save {
+    background: #43a047;
+    color: white;
+    font-weight: bold;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+button.save:hover {
+    background: #388e3c;
+}
+
+button.cancel {
+    background: #999;
+    color: white;
+}
+
+button.cancel:hover {
+    background: #777;
 }
 
 button.danger {
     background: #d9534f;
     color: white;
-    border: none;
-    border-radius: 6px;
-    /* slightly rounder corners */
-    padding: 10px 18px;
-    /* more spacing around the text */
-    font-size: 15px;
-    /* larger text */
-    cursor: pointer;
-    transition: background 0.2s ease, transform 0.1s ease;
 }
 
 button.danger:hover {
     background: #c9302c;
 }
 
-button.danger:active {
-    background: #b52b27;
-    transform: scale(0.97);
-    /* subtle "pressed" effect */
-}
-
-
 /* Extension Options Grid */
 .ext-options {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 4px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 16px;
 }
 
 
