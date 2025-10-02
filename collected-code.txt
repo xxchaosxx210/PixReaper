@@ -197,18 +197,41 @@ body {
 }
 
 #status-bar button {
-    padding: 4px 8px;
+    padding: 6px 12px;
+    font-size: 14px;
+    border: none;
+    border-radius: 6px;
     cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
 }
 
-#cancelBtn.cancel {
+/* Download and Cancel buttons */
+#downloadBtn {
+    background: #4caf50;
+    color: white;
+}
+
+#downloadBtn:hover {
+    background: #43a047;
+}
+
+#downloadBtn:active {
+    background: #388e3c;
+    transform: scale(0.97);
+}
+
+#cancelBtn {
     background: #f44336;
     color: white;
 }
 
-#downloadBtn {
-    background: #4caf50;
-    color: white;
+#cancelBtn:hover {
+    background: #e53935;
+}
+
+#cancelBtn:active {
+    background: #c62828;
+    transform: scale(0.97);
 }
 
 /* Hide download/cancel by default */
@@ -284,7 +307,6 @@ body {
 
 .modal-actions button {
     flex: 1;
-    /* equal width for all buttons */
     padding: 12px 18px;
     font-size: 15px;
     border: none;
@@ -303,11 +325,8 @@ body {
 
 #hostList {
     min-height: 120px;
-    /* about 6 lines */
     resize: vertical;
-    /* allow user to drag it taller */
 }
-
 
 /* Specific modal button styles */
 button.save {
