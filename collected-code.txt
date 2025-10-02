@@ -301,6 +301,14 @@ body {
     transform: scale(0.97);
 }
 
+#hostList {
+    min-height: 120px;
+    /* about 6 lines */
+    resize: vertical;
+    /* allow user to drag it taller */
+}
+
+
 /* Specific modal button styles */
 button.save {
     background: #43a047;
