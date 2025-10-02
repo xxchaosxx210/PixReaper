@@ -211,6 +211,13 @@ body {
     color: white;
 }
 
+/* Hide download/cancel by default */
+#downloadBtn,
+#cancelBtn {
+    display: none;
+}
+
+
 /* Progress Bar */
 #progressContainer {
     height: 4px;

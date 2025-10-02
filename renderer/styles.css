@@ -168,6 +168,17 @@ button.danger {
     color: white;
 }
 
+button.danger:hover {
+    background: #d32f2f;
+    /* darker red */
+}
+
+button.danger:active {
+    background: #b71c1c;
+    /* even darker red while pressing */
+}
+
+
 /* Extension Options Grid */
 .ext-options {
     display: grid;
