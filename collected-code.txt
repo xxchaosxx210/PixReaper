@@ -272,9 +272,29 @@ body {
 }
 
 button.danger {
-    background: #f44336;
+    background: #d9534f;
     color: white;
+    border: none;
+    border-radius: 6px;
+    /* slightly rounder corners */
+    padding: 10px 18px;
+    /* more spacing around the text */
+    font-size: 15px;
+    /* larger text */
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
 }
+
+button.danger:hover {
+    background: #c9302c;
+}
+
+button.danger:active {
+    background: #b52b27;
+    transform: scale(0.97);
+    /* subtle "pressed" effect */
+}
+
 
 /* Extension Options Grid */
 .ext-options {
