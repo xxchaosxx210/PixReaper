@@ -357,6 +357,7 @@ window.electronAPI.receive("download:progress", (data) => {
 
     const li = resultsList.querySelector(`li[data-index="${index}"]`);
     if (li) {
+        li.className = status;
         const icon = li.querySelector(".status-icon");
         if (icon) icon.className = `status-icon ${status}`;
 
