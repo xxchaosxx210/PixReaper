@@ -68,9 +68,13 @@
                 <label><input type="checkbox" id="subfolder" /> Create subfolder per download (URL slug or
                     timestamp)</label>
 
-                <label for="maxConnections">Max connections:</label>
-                <input type="range" id="maxConnections" min="1" max="50" value="10" />
-                <span id="maxConnectionsValue">10</span>
+                <!-- Max Connections with border grouping -->
+                <div class="option-group">
+                    <label for="maxConnections">Max connections:</label>
+                    <input type="range" id="maxConnections" min="1" max="50" value="10" />
+                    <span id="maxConnectionsValue">10</span>
+                </div>
+
 
                 <h3>Allowed File Extensions</h3>
                 <div id="ext-options" class="ext-options">

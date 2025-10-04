@@ -343,3 +343,12 @@ button.danger:hover {
     min-height: 140px;
     resize: vertical;
 }
+
+/* Grouped Option Styling */
+.option-group {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 18px;
+    background: #fafafa;
+}
