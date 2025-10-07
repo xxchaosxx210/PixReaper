@@ -237,6 +237,61 @@ cancelBtn.addEventListener("click", () => {
     cancelBtn.disabled = true;
 });
 
+// --- Options Modal Logic ---
+const optionsModal = document.getElementById("optionsModal");
+const optionsButton = document.getElementById("optionsBtn");
+const cancelOptions = document.getElementById("cancelOptions");
+const saveOptions = document.getElementById("saveOptions");
+const resetOptions = document.getElementById("resetOptions");
+const maxConnections = document.getElementById("maxConnections");
+const maxConnectionsValue = document.getElementById("maxConnectionsValue");
+
+optionsButton.addEventListener("click", () => {
+    optionsModal.style.display = "block";
+});
+
+cancelOptions.addEventListener("click", () => {
+    optionsModal.style.display = "none";
+});
+
+maxConnections.addEventListener("input", () => {
+    maxConnectionsValue.textContent = maxConnections.value;
+});
+
+saveOptions.addEventListener("click", () => {
+    const selectedExts = Array.from(
+        document.querySelectorAll(".ext-option:checked")
+    ).map(cb => cb.value);
+
+    const hostList = document.getElementById("hostList").value
+        .split("\n")
+        .map(h => h.trim().toLowerCase())
+        .filter(Boolean);
+
+    const newOptions = {
+        prefix: document.getElementById("prefix").value.trim(),
+        savePath: document.getElementById("savePath").value.trim(),
+        createSubfolder: document.getElementById("subfolder").checked,
+        indexing: document.querySelector('input[name="indexing"]:checked').value,
+        maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
+        debugLogging: document.getElementById("debugLogging").checked,
+        validExtensions: selectedExts,
+        validHosts: hostList,
+        bottomPanelHeight: parseInt(bottomPanel.style.height, 10) || null
+    };
+
+    console.log("[Renderer] Saving options:", newOptions);
+    window.electronAPI.send("options:save", newOptions);
+    optionsModal.style.display = "none";
+});
+
+resetOptions.addEventListener("click", () => {
+    if (!confirm("Are you sure you want to reset all options to defaults?")) return;
+    console.log("[Renderer] Resetting options to defaults...");
+    window.electronAPI.send("options:reset");
+});
+
+
 // --- Helpers ---
 function sanitizeFilename(name) { return name.replace(/[<>:"/\\|?*]+/g, "_"); }
 function isAllowedExtension(url, allowed) {
