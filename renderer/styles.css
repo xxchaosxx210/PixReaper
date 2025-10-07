@@ -107,7 +107,7 @@ body {
     margin-right: 6px;
 }
 
-/* Status color coding + icons */
+/* Status color coding */
 #results li.pending {
     border-left-color: #9e9e9e;
 }
@@ -193,13 +193,12 @@ body {
     color: white;
 }
 
-/* Hide download/cancel by default */
 #downloadBtn,
 #cancelBtn {
     display: none;
 }
 
-/* Hover/active polish for download/cancel */
+/* Hover polish */
 #downloadBtn:hover {
     background: #43a047;
 }
@@ -243,68 +242,51 @@ body {
 .modal-content {
     background: white;
     margin: 50px auto;
-    padding: 24px;
+    padding: 0;
     width: 500px;
     max-height: 80%;
-    overflow-y: auto;
-    border-radius: 6px;
-}
-
-/* Add more space between controls */
-.modal-content h2 {
-    margin-top: 0;
-    margin-bottom: 20px;
-}
-
-.modal-content label {
-    display: block;
-    margin-bottom: 6px;
-    font-weight: 500;
-    color: #333;
-}
-
-.modal-content input[type="text"],
-.modal-content input[type="range"],
-.modal-content textarea,
-.modal-content .ext-options,
-.modal-content div {
-    width: 100%;
-    margin-bottom: 18px;
-    /* increased spacing between controls */
-}
-
-/* Modal Actions */
-.modal-actions {
     display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 20px;
+    flex-direction: column;
+    border-radius: 6px;
+    overflow: hidden;
 }
 
+/* Sticky header with buttons */
+.modal-header {
+    position: sticky;
+    top: 0;
+    background: #f0f0f0;
+    padding: 10px 16px;
+    border-bottom: 1px solid #ddd;
+    z-index: 10;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-actions.top {
+    display: flex;
+    gap: 8px;
+}
+
+.modal-body {
+    overflow-y: auto;
+    padding: 16px;
+}
+
+/* Shared modal button styles */
 .modal-actions button {
-    flex: 1;
-    padding: 10px 18px;
-    font-size: 15px;
+    padding: 8px 14px;
+    font-size: 14px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+    font-weight: bold;
+    color: #fff;
 }
 
-.modal-actions button:hover {
-    opacity: 0.9;
-}
-
-.modal-actions button:active {
-    transform: scale(0.97);
-}
-
-/* Specific modal button styles */
 button.save {
     background: #43a047;
-    color: white;
-    font-weight: bold;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 button.save:hover {
@@ -313,7 +295,6 @@ button.save:hover {
 
 button.cancel {
     background: #999;
-    color: white;
 }
 
 button.cancel:hover {
@@ -322,11 +303,27 @@ button.cancel:hover {
 
 button.danger {
     background: #d9534f;
-    color: white;
 }
 
 button.danger:hover {
     background: #c9302c;
+}
+
+/* Scrollable body form controls */
+.modal-body label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #333;
+}
+
+.modal-body input[type="text"],
+.modal-body input[type="range"],
+.modal-body textarea,
+.modal-body .ext-options,
+.modal-body div {
+    width: 100%;
+    margin-bottom: 18px;
 }
 
 /* Extension Options Grid */
@@ -334,21 +331,13 @@ button.danger:hover {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
     gap: 8px;
-    /* slightly larger gap for clarity */
     margin-bottom: 18px;
 }
 
-/* Host List box bigger */
+/* Host List */
 #hostList {
     min-height: 140px;
     resize: vertical;
 }
 
-/* Grouped Option Styling */
-.option-group {
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    padding: 12px;
-    margin-bottom: 18px;
-    background: #fafafa;
-}
+/* Grouped Op*

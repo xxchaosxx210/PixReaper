@@ -17,9 +17,8 @@
             <button id="optionsBtn">⚙️ Options</button>
         </div>
 
-        <!-- ✅ Fixed webview -->
+        <!-- ✅ Webview -->
         <webview id="browserView" src="about:blank" allowpopups preload="../preload.js"></webview>
-
 
         <!-- ✅ Status Bar -->
         <div id="status-bar">
@@ -47,7 +46,15 @@
     <!-- ⚙️ Options Modal -->
     <div id="optionsModal" class="modal">
         <div class="modal-content">
-            <h2>⚙️ PixReaper Options</h2>
+            <!-- Fixed header with buttons -->
+            <div class="modal-header">
+                <h2>⚙️ PixReaper Options</h2>
+                <div class="modal-actions top">
+                    <button id="resetOptions" class="danger">Reset</button>
+                    <button id="cancelOptions" class="cancel">Cancel</button>
+                    <button id="saveOptions" class="save">Save</button>
+                </div>
+            </div>
 
             <!-- Scrollable content -->
             <div class="modal-body">
@@ -76,7 +83,6 @@
                     <span id="maxConnectionsValue">10</span>
                 </div>
 
-
                 <h3>Allowed File Extensions</h3>
                 <div id="ext-options" class="ext-options">
                     <label><input type="checkbox" class="ext-option" value="jpg" checked> JPG</label>
@@ -92,13 +98,6 @@
                 <textarea id="hostList" placeholder="example.com"></textarea>
 
                 <label><input type="checkbox" id="debugLogging" /> Enable debug logging</label>
-            </div>
-
-            <!-- Fixed footer actions -->
-            <div class="modal-actions">
-                <button id="resetOptions" class="danger">Reset to Default</button>
-                <button id="cancelOptions" class="cancel">Cancel</button>
-                <button id="saveOptions" class="save">Save</button>
             </div>
         </div>
     </div>
