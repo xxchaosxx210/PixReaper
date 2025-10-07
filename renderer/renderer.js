@@ -8,6 +8,34 @@ const goButton = document.getElementById("goBtn");
 const scanButton = document.getElementById("scanBtn");
 const browsePathBtn = document.getElementById("browsePath");
 
+// --- Helper: Safe navigation with readiness check ---
+function navigateTo(rawUrl) {
+    if (!rawUrl) return;
+
+    let url = rawUrl.trim();
+    if (!url) url = "about:blank";
+    if (!/^https?:\/\//i.test(url) && url !== "about:blank") {
+        url = "https://" + url;
+    }
+
+    const attemptLoad = () => {
+        try {
+            console.log("[Renderer] Navigating to:", url);
+            webview.loadURL(url);
+        } catch (err) {
+            console.error("[Renderer] Failed to load URL:", err);
+        }
+    };
+
+    // Ensure webview is ready before calling loadURL
+    if (webview.isLoadingMainFrame && webview.isLoadingMainFrame()) {
+        setTimeout(attemptLoad, 300);
+    } else {
+        attemptLoad();
+    }
+}
+
+// --- Folder Picker ---
 browsePathBtn.addEventListener("click", () => {
     console.log("[Renderer] Browse for folder...");
     window.electronAPI.send("choose-folder");
@@ -69,15 +97,18 @@ window.addEventListener("mouseup", (e) => {
 
 // --- Navigation ---
 goButton.addEventListener("click", () => {
-    let url = urlInput.value.trim();
-    if (!/^https?:\/\//i.test(url)) {
-        url = "https://" + url;
-    }
-    webview.loadURL(url);
+    const url = urlInput.value.trim();
+    navigateTo(url);
 });
 
+// ✅ URL Persistence — save last visited URL
 webview.addEventListener("did-navigate", (event) => {
-    urlInput.value = event.url;
+    const currentUrl = event.url;
+    urlInput.value = currentUrl;
+    if (currentUrl && currentUrl !== "about:blank") {
+        console.log("[Renderer] Saving last visited URL:", currentUrl);
+        window.electronAPI.send("options:save", { lastUrl: currentUrl });
+    }
 });
 
 // --- Results List ---
@@ -171,7 +202,6 @@ window.electronAPI.receive("scan-complete", () => {
     if (resultsList.children.length > 0) {
         statusText.textContent = "Status: Scan complete. Ready to download.";
 
-        // change all pending scan results to 'ready'
         resultsList.querySelectorAll("li.pending").forEach(li => {
             li.className = "ready";
         });
@@ -179,7 +209,6 @@ window.electronAPI.receive("scan-complete", () => {
         statusText.textContent = "Status: Scan complete — no results found.";
     }
 });
-
 
 // --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
@@ -228,9 +257,7 @@ saveOptions.addEventListener("click", () => {
 
 // --- Reset Options ---
 resetOptions.addEventListener("click", () => {
-    if (!confirm("Are you sure you want to reset all options to defaults?")) {
-        return;
-    }
+    if (!confirm("Are you sure you want to reset all options to defaults?")) return;
     console.log("[Renderer] Resetting options to defaults...");
     window.electronAPI.send("options:reset");
 });
@@ -292,7 +319,7 @@ downloadBtn.addEventListener("click", async () => {
         const index = currentManifest.length + 1;
         let base = url.split("/").pop().split("?")[0] || "image";
         base = sanitizeFilename(base);
-        if (!base.includes(".")) base += ".jpg"; // ✅ fixed here
+        if (!base.includes(".")) base += ".jpg";
 
         const filename = options.indexing === "order"
             ? `${options.prefix}${String(index).padStart(padWidth, "0")}_${base}`
@@ -345,6 +372,16 @@ window.electronAPI.receive("options:load", (opt) => {
     if (opt.bottomPanelHeight) {
         bottomPanel.style.height = opt.bottomPanelHeight + "px";
         bottomPanel.style.flex = "0 0 auto";
+    }
+
+    // ✅ Restore last visited URL (if exists)
+    if (opt.lastUrl && opt.lastUrl !== "about:blank") {
+        console.log("[Renderer] Restoring last URL:", opt.lastUrl);
+        urlInput.value = opt.lastUrl;
+        navigateTo(opt.lastUrl);
+    } else {
+        urlInput.value = "about:blank";
+        navigateTo("about:blank");
     }
 });
 

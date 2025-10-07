@@ -15,7 +15,7 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
-        icon: __dirname + "/build/icon.ico",
+        icon: path.join(__dirname, "build", "icon.ico"),
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
             contextIsolation: true,
@@ -26,10 +26,11 @@ function createWindow() {
 
     mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 
-    // When the renderer has loaded, send current options
+    // When the renderer has loaded, send current options (including lastUrl)
     mainWindow.webContents.on("did-finish-load", () => {
         const currentOptions = optionsManager.loadOptions();
         setDebug(!!currentOptions.debugLogging);
+        logDebug("[Main] Sending options to renderer:", currentOptions);
         mainWindow.webContents.send("options:load", currentOptions);
     });
 
@@ -51,7 +52,10 @@ app.whenReady().then(() => {
         const saved = optionsManager.saveOptions(newOptions);
         setDebug(!!saved.debugLogging); // ✅ update logger
         event.sender.send("options:saved", saved);
-        mainWindow.webContents.send("options:load", saved); // push latest back to renderer
+        // ✅ Don’t re-send "options:load" if this was just a quick save (avoids reload loop)
+        if (!newOptions.lastUrl) {
+            mainWindow.webContents.send("options:load", saved);
+        }
     });
 
     // IPC: reset options to defaults
@@ -133,7 +137,7 @@ app.on("activate", () => {
 const CONCURRENCY = 8;
 
 ipcMain.on("scan-page", async (event, links) => {
-    logDebug("[Main] Received links:", links); // ✅ fixed parenthesis
+    logDebug("[Main] Received links:", links);
     cancelScan = false;
 
     for (let i = 0; i < links.length; i += CONCURRENCY) {

@@ -20,7 +20,7 @@ const DEFAULT_OPTIONS = {
     debugLogging: false,     // toggle debug logging
     validExtensions: ["jpg", "jpeg"], // ✅ default allowed extensions
 
-    // ✅ New: default supported hosts (can be edited in Options UI)
+    // ✅ Default supported hosts (can be edited in Options UI)
     validHosts: [
         "pixhost.to",
         "imagebam.com",
@@ -35,7 +35,10 @@ const DEFAULT_OPTIONS = {
         "imgview.net",
         "radikal.ru",
         "imageupper.com"
-    ]
+    ],
+
+    // ✅ New: Remember last visited URL (for persistence)
+    lastUrl: "about:blank"
 };
 
 /**
@@ -48,19 +51,22 @@ function loadOptions() {
             const raw = fs.readFileSync(optionsFilePath, "utf-8");
             const parsed = JSON.parse(raw);
 
+            // Merge with defaults so new keys (like lastUrl) get added automatically
             const merged = { ...DEFAULT_OPTIONS, ...parsed };
 
+            // ✅ Ensure savePath is valid and normalized
             if (!merged.savePath || typeof merged.savePath !== "string") {
                 merged.savePath = DEFAULT_OPTIONS.savePath;
             } else {
                 merged.savePath = path.normalize(merged.savePath);
             }
 
+            // ✅ Ensure numeric and string validations
             if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
                 merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
             }
 
-            // ✅ Ensure validExtensions is always normalized
+            // ✅ Normalize extensions
             if (!Array.isArray(merged.validExtensions)) {
                 merged.validExtensions = [...DEFAULT_OPTIONS.validExtensions];
             } else {
@@ -69,13 +75,18 @@ function loadOptions() {
                 );
             }
 
-            // ✅ Ensure validHosts is always normalized
+            // ✅ Normalize hosts
             if (!Array.isArray(merged.validHosts)) {
                 merged.validHosts = [...DEFAULT_OPTIONS.validHosts];
             } else {
                 merged.validHosts = merged.validHosts.map(h =>
                     String(h).toLowerCase().replace(/^www\./, "")
                 );
+            }
+
+            // ✅ Ensure lastUrl is a valid string
+            if (typeof merged.lastUrl !== "string" || !merged.lastUrl.trim()) {
+                merged.lastUrl = DEFAULT_OPTIONS.lastUrl;
             }
 
             return merged;
@@ -95,14 +106,16 @@ function saveOptions(newOptions = {}) {
     const current = loadOptions();
     const merged = { ...current, ...newOptions };
 
-    if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
-        merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
-    }
-
+    // ✅ Validate & normalize savePath
     if (!merged.savePath || typeof merged.savePath !== "string") {
         merged.savePath = DEFAULT_OPTIONS.savePath;
     } else {
         merged.savePath = path.normalize(merged.savePath);
+    }
+
+    // ✅ Validate numeric field
+    if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
+        merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
     }
 
     // ✅ Normalize extensions before saving
@@ -121,6 +134,11 @@ function saveOptions(newOptions = {}) {
         merged.validHosts = merged.validHosts.map(h =>
             String(h).toLowerCase().replace(/^www\./, "")
         );
+    }
+
+    // ✅ Ensure lastUrl always exists as a string
+    if (typeof merged.lastUrl !== "string" || !merged.lastUrl.trim()) {
+        merged.lastUrl = DEFAULT_OPTIONS.lastUrl;
     }
 
     try {
