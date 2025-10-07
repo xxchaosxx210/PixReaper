@@ -403,6 +403,7 @@ button.danger:hover {
     background: #fafafa;
 }
 
+/* --- Bookmark Prompt Modal --- */
 .prompt-overlay {
     position: fixed;
     inset: 0;
@@ -410,29 +411,95 @@ button.danger:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: 2000;
+    animation: fadeIn 0.2s ease-out;
 }
 
 .prompt-box {
-    background: #222;
-    color: #fff;
-    padding: 16px;
-    border-radius: 8px;
-    min-width: 280px;
-    box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+    background: #1e1e1e;
+    color: #eee;
+    padding: 20px 24px;
+    border-radius: 10px;
+    min-width: 320px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+    animation: scaleIn 0.2s ease-out;
 }
 
 .prompt-box p {
-    margin: 0 0 8px;
+    margin: 0 0 10px;
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.prompt-box input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background: #2b2b2b;
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.prompt-box input[type="text"]:focus {
+    border-color: #2196f3;
 }
 
 .prompt-buttons {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     justify-content: flex-end;
-    margin-top: 10px;
+    margin-top: 14px;
 }
 
-.prompt-buttons .cancel {
+.prompt-buttons button {
+    border: none;
+    padding: 7px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+}
+
+.prompt-buttons button#promptOk {
+    background: #2196f3;
+    color: white;
+}
+
+.prompt-buttons button#promptOk:hover {
+    background: #1976d2;
+}
+
+.prompt-buttons button#promptCancel {
     background: #555;
+    color: #fff;
+}
+
+.prompt-buttons button#promptCancel:hover {
+    background: #777;
+}
+
+/* Small fade and pop-in animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }

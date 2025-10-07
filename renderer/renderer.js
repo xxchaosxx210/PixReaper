@@ -32,7 +32,6 @@ function navigateTo(rawUrl) {
 // --- Bookmark Logic ---
 let currentBookmarks = [];
 
-// Update dropdown
 function refreshBookmarkList() {
     bookmarkSelect.innerHTML = "";
     const defaultOption = document.createElement("option");
@@ -55,7 +54,6 @@ function refreshBookmarkList() {
     }
 }
 
-// When a bookmark is selected
 bookmarkSelect.addEventListener("change", (e) => {
     const url = e.target.value;
     if (url) {
@@ -64,6 +62,7 @@ bookmarkSelect.addEventListener("change", (e) => {
     }
 });
 
+// --- Prompt Overlay for Bookmark Title ---
 function showPrompt(message, defaultValue = "", callback) {
     const modal = document.createElement("div");
     modal.className = "prompt-overlay";
@@ -89,14 +88,13 @@ function showPrompt(message, defaultValue = "", callback) {
     cancelBtn.onclick = () => modal.remove();
 }
 
-// --- Replace the old prompt() usage with this ---
+// --- Add Bookmark ---
 addBookmarkBtn.addEventListener("click", () => {
     const currentUrl = urlInput.value.trim();
     if (!currentUrl || currentUrl === "about:blank") {
         alert("No valid URL to bookmark.");
         return;
     }
-
     showPrompt("Enter a title for this bookmark:", currentUrl, (title) => {
         if (!title) return;
         console.log("[Renderer] Adding bookmark:", { title, url: currentUrl });
@@ -104,31 +102,25 @@ addBookmarkBtn.addEventListener("click", () => {
     });
 });
 
-
-// --- Remove bookmark ---
+// --- Remove Bookmark ---
 removeBookmarkBtn.addEventListener("click", () => {
     const selectedUrl = bookmarkSelect.value;
     if (!selectedUrl) {
         alert("Please select a bookmark to remove.");
         return;
     }
-
     if (!confirm("Remove this bookmark?")) return;
     console.log("[Renderer] Removing bookmark:", selectedUrl);
-
     window.electronAPI.send("options:removeBookmark", selectedUrl);
 });
-
 
 // --- Folder Picker ---
 browsePathBtn.addEventListener("click", () => {
     console.log("[Renderer] Browse for folder...");
     window.electronAPI.send("choose-folder");
 });
-
 window.electronAPI.receive("choose-folder:result", (folderPath) => {
     if (folderPath) {
-        console.log("[Renderer] Folder chosen:", folderPath);
         document.getElementById("savePath").value = folderPath;
     }
 });
@@ -218,7 +210,6 @@ scanButton.addEventListener("click", async () => {
 
     const hostText = document.getElementById("hostList").value || "";
     const validHosts = hostText.split("\n").map(h => h.trim().toLowerCase()).filter(Boolean);
-    console.log("[Renderer] Starting scan. Hosts:", validHosts);
 
     const rawLinks = await webview.executeJavaScript(`
         Array.from(document.querySelectorAll("a[href]"))
@@ -226,27 +217,23 @@ scanButton.addEventListener("click", async () => {
             .filter(Boolean)
     `);
 
-    console.log("[Renderer] Raw links found:", rawLinks.length);
     const filteredLinks = validHosts.length > 0
         ? rawLinks.filter(href => validHosts.some(host => href.toLowerCase().includes(host)))
         : rawLinks;
-    console.log("[Renderer] Filtered links:", filteredLinks.length);
+
     window.electronAPI.send("scan-page", filteredLinks);
 });
 
 // --- Scan Progress ---
 window.electronAPI.receive("scan-progress", (data) => {
-    const allowedExts = Array.from(
-        document.querySelectorAll(".ext-option:checked")
-    ).map(cb => cb.value.toLowerCase());
+    const allowedExts = Array.from(document.querySelectorAll(".ext-option:checked"))
+        .map(cb => cb.value.toLowerCase());
     const url = data.resolved || data.original;
-    if (!url) return;
-    if (!isAllowedExtension(url, allowedExts)) return;
+    if (!url || !isAllowedExtension(url, allowedExts)) return;
 
     const index = resultsList.children.length + 1;
     const li = document.createElement("li");
     li.className = "pending";
-    li.setAttribute("data-index", index);
     li.innerHTML = `<span class="status-icon pending"></span><a href="${url}" target="_blank">${url}</a>`;
     resultsList.appendChild(li);
     imagesFound++;
@@ -266,12 +253,19 @@ window.electronAPI.receive("scan-complete", () => {
     }
 });
 
+// --- Cancel Scan ---
+cancelBtn.addEventListener("click", () => {
+    console.log("[Renderer] Cancelling scan...");
+    window.electronAPI.send("scan:cancel");
+    cancelBtn.disabled = true;
+});
+
 // --- Helpers ---
 function sanitizeFilename(name) { return name.replace(/[<>:"/\\|?*]+/g, "_"); }
 function isAllowedExtension(url, allowed) {
     if (!url) return false;
     const clean = url.split("?")[0].toLowerCase();
-    return allowed.some(ext => clean.endsWith("." + ext.toLowerCase()));
+    return allowed.some(ext => clean.endsWith("." + ext));
 }
 function deriveSlugFromUrl(url) {
     try {
@@ -282,10 +276,56 @@ function deriveSlugFromUrl(url) {
     } catch { return null; }
 }
 
+// --- DOWNLOAD BUTTON ---
+downloadBtn.addEventListener("click", () => {
+    const options = {
+        prefix: document.getElementById("prefix").value || "",
+        savePath: document.getElementById("savePath").value,
+        createSubfolder: document.getElementById("subfolder").checked,
+        maxConnections: Number(document.getElementById("maxConnections").value) || 10,
+        indexing: document.querySelector('input[name="indexing"]:checked')?.value || "order",
+    };
+
+    const allowedExts = Array.from(document.querySelectorAll(".ext-option:checked"))
+        .map(cb => cb.value.toLowerCase());
+
+    currentManifest = Array.from(resultsList.querySelectorAll("a"))
+        .map(a => a.href)
+        .filter(href => isAllowedExtension(href, allowedExts));
+
+    if (currentManifest.length === 0) {
+        alert("No valid images to download.");
+        return;
+    }
+
+    downloadTotal = currentManifest.length;
+    downloadCompleted = 0;
+    progressBar.style.width = "0%";
+    statusText.textContent = `Status: Downloading ${downloadTotal} files...`;
+    cancelBtn.style.display = "inline-block";
+    cancelBtn.disabled = false;
+
+    window.electronAPI.send("download:start", { manifest: currentManifest, options });
+});
+
+// --- Download Progress ---
+window.electronAPI.receive("download:progress", (data) => {
+    downloadCompleted++;
+    const percent = Math.round((downloadCompleted / downloadTotal) * 100);
+    progressBar.style.width = percent + "%";
+    statusText.textContent = `Downloading... ${percent}%`;
+});
+
+// --- Download Complete ---
+window.electronAPI.receive("download:complete", () => {
+    statusText.textContent = "Status: Download complete.";
+    progressBar.style.width = "100%";
+    cancelBtn.style.display = "none";
+    setTimeout(() => (progressBar.style.width = "0%"), 1500);
+});
+
 // --- IPC: Options Load ---
 window.electronAPI.receive("options:load", (opt) => {
-    console.log("[Renderer] Loaded options:", opt);
-
     document.getElementById("prefix").value = opt.prefix ?? "";
     document.getElementById("savePath").value = opt.savePath ?? "";
     document.getElementById("subfolder").checked = !!opt.createSubfolder;
@@ -306,11 +346,9 @@ window.electronAPI.receive("options:load", (opt) => {
         bottomPanel.style.flex = "0 0 auto";
     }
 
-    // ✅ Bookmarks
     currentBookmarks = opt.bookmarks ?? [];
     refreshBookmarkList();
 
-    // ✅ Restore last URL
     if (opt.lastUrl && opt.lastUrl !== "about:blank") {
         urlInput.value = opt.lastUrl;
         navigateTo(opt.lastUrl);
