@@ -8,32 +8,117 @@ const goButton = document.getElementById("goBtn");
 const scanButton = document.getElementById("scanBtn");
 const browsePathBtn = document.getElementById("browsePath");
 
-// --- Helper: Safe navigation with readiness check ---
+// --- Bookmark Controls ---
+const bookmarkSelect = document.getElementById("bookmarkSelect");
+const addBookmarkBtn = document.getElementById("addBookmarkBtn");
+const removeBookmarkBtn = document.getElementById("removeBookmarkBtn");
+
+// --- Helper: Safe navigation ---
 function navigateTo(rawUrl) {
     if (!rawUrl) return;
-
     let url = rawUrl.trim();
     if (!url) url = "about:blank";
     if (!/^https?:\/\//i.test(url) && url !== "about:blank") {
         url = "https://" + url;
     }
-
-    const attemptLoad = () => {
-        try {
-            console.log("[Renderer] Navigating to:", url);
-            webview.loadURL(url);
-        } catch (err) {
-            console.error("[Renderer] Failed to load URL:", err);
-        }
-    };
-
-    // Ensure webview is ready before calling loadURL
-    if (webview.isLoadingMainFrame && webview.isLoadingMainFrame()) {
-        setTimeout(attemptLoad, 300);
-    } else {
-        attemptLoad();
+    try {
+        console.log("[Renderer] Navigating to:", url);
+        webview.loadURL(url);
+    } catch (err) {
+        console.error("[Renderer] Failed to load URL:", err);
     }
 }
+
+// --- Bookmark Logic ---
+let currentBookmarks = [];
+
+// Update dropdown
+function refreshBookmarkList() {
+    bookmarkSelect.innerHTML = "";
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "-- Select Bookmark --";
+    bookmarkSelect.appendChild(defaultOption);
+
+    if (currentBookmarks.length === 0) {
+        const emptyOption = document.createElement("option");
+        emptyOption.disabled = true;
+        emptyOption.textContent = "No bookmarks saved";
+        bookmarkSelect.appendChild(emptyOption);
+    } else {
+        currentBookmarks.forEach((b) => {
+            const opt = document.createElement("option");
+            opt.value = b.url;
+            opt.textContent = b.title || b.url;
+            bookmarkSelect.appendChild(opt);
+        });
+    }
+}
+
+// When a bookmark is selected
+bookmarkSelect.addEventListener("change", (e) => {
+    const url = e.target.value;
+    if (url) {
+        urlInput.value = url;
+        navigateTo(url);
+    }
+});
+
+function showPrompt(message, defaultValue = "", callback) {
+    const modal = document.createElement("div");
+    modal.className = "prompt-overlay";
+    modal.innerHTML = `
+        <div class="prompt-box">
+            <p>${message}</p>
+            <input type="text" id="promptInput" value="${defaultValue}" autofocus />
+            <div class="prompt-buttons">
+                <button id="promptOk">OK</button>
+                <button id="promptCancel" class="cancel">Cancel</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    const input = modal.querySelector("#promptInput");
+    const okBtn = modal.querySelector("#promptOk");
+    const cancelBtn = modal.querySelector("#promptCancel");
+
+    okBtn.onclick = () => {
+        callback(input.value.trim());
+        modal.remove();
+    };
+    cancelBtn.onclick = () => modal.remove();
+}
+
+// --- Replace the old prompt() usage with this ---
+addBookmarkBtn.addEventListener("click", () => {
+    const currentUrl = urlInput.value.trim();
+    if (!currentUrl || currentUrl === "about:blank") {
+        alert("No valid URL to bookmark.");
+        return;
+    }
+
+    showPrompt("Enter a title for this bookmark:", currentUrl, (title) => {
+        if (!title) return;
+        console.log("[Renderer] Adding bookmark:", { title, url: currentUrl });
+        window.electronAPI.send("options:addBookmark", { title, url: currentUrl });
+    });
+});
+
+
+// --- Remove bookmark ---
+removeBookmarkBtn.addEventListener("click", () => {
+    const selectedUrl = bookmarkSelect.value;
+    if (!selectedUrl) {
+        alert("Please select a bookmark to remove.");
+        return;
+    }
+
+    if (!confirm("Remove this bookmark?")) return;
+    console.log("[Renderer] Removing bookmark:", selectedUrl);
+
+    window.electronAPI.send("options:removeBookmark", selectedUrl);
+});
+
 
 // --- Folder Picker ---
 browsePathBtn.addEventListener("click", () => {
@@ -57,7 +142,6 @@ toggleViewBtn.addEventListener("click", () => {
     const isHidden = webview.classList.toggle("hidden");
     splitter.style.display = isHidden ? "none" : "block";
     toggleViewBtn.textContent = isHidden ? "🖥️ Show View" : "🖥️ Hide View";
-
     if (isHidden) {
         bottomPanel.style.height = "auto";
         bottomPanel.style.flex = "1 1 auto";
@@ -69,14 +153,12 @@ toggleViewBtn.addEventListener("click", () => {
 
 // --- Resizable Bottom Panel ---
 let isResizing = false;
-
 splitter.addEventListener("mousedown", (e) => {
     if (webview.classList.contains("hidden")) return;
     isResizing = true;
     document.body.style.cursor = "row-resize";
     e.preventDefault();
 });
-
 window.addEventListener("mousemove", (e) => {
     if (!isResizing) return;
     const newHeight = window.innerHeight - e.clientY;
@@ -84,7 +166,6 @@ window.addEventListener("mousemove", (e) => {
     bottomPanel.style.height = clamped + "px";
     bottomPanel.style.flex = "0 0 auto";
 });
-
 window.addEventListener("mouseup", (e) => {
     if (isResizing) {
         isResizing = false;
@@ -101,7 +182,7 @@ goButton.addEventListener("click", () => {
     navigateTo(url);
 });
 
-// ✅ URL Persistence — save last visited URL
+// --- Save last visited URL ---
 webview.addEventListener("did-navigate", (event) => {
     const currentUrl = event.url;
     urlInput.value = currentUrl;
@@ -111,14 +192,13 @@ webview.addEventListener("did-navigate", (event) => {
     }
 });
 
-// --- Results List ---
+// --- Results + Status ---
 const resultsList = document.getElementById("results");
 let currentManifest = [];
 let imagesFound = 0;
 let downloadTotal = 0;
 let downloadCompleted = 0;
 
-// --- Status Bar Elements ---
 const statusText = document.getElementById("statusText");
 const imagesFoundText = document.getElementById("imageCount");
 const progressBar = document.getElementById("progressBar");
@@ -138,7 +218,6 @@ scanButton.addEventListener("click", async () => {
 
     const hostText = document.getElementById("hostList").value || "";
     const validHosts = hostText.split("\n").map(h => h.trim().toLowerCase()).filter(Boolean);
-
     console.log("[Renderer] Starting scan. Hosts:", validHosts);
 
     const rawLinks = await webview.executeJavaScript(`
@@ -148,124 +227,47 @@ scanButton.addEventListener("click", async () => {
     `);
 
     console.log("[Renderer] Raw links found:", rawLinks.length);
-
     const filteredLinks = validHosts.length > 0
         ? rawLinks.filter(href => validHosts.some(host => href.toLowerCase().includes(host)))
         : rawLinks;
-
     console.log("[Renderer] Filtered links:", filteredLinks.length);
-
     window.electronAPI.send("scan-page", filteredLinks);
 });
 
-// --- Scan progress ---
+// --- Scan Progress ---
 window.electronAPI.receive("scan-progress", (data) => {
-    console.log("[Renderer] scan-progress:", data);
-
     const allowedExts = Array.from(
         document.querySelectorAll(".ext-option:checked")
     ).map(cb => cb.value.toLowerCase());
-
     const url = data.resolved || data.original;
     if (!url) return;
-
-    if (!isAllowedExtension(url, allowedExts)) {
-        console.warn("[Renderer] Skipped disallowed file:", url);
-        return;
-    }
+    if (!isAllowedExtension(url, allowedExts)) return;
 
     const index = resultsList.children.length + 1;
     const li = document.createElement("li");
     li.className = "pending";
     li.setAttribute("data-index", index);
-
-    li.innerHTML = `
-        <span class="status-icon pending"></span>
-        <a href="${url}" target="_blank">${url}</a>
-    `;
+    li.innerHTML = `<span class="status-icon pending"></span><a href="${url}" target="_blank">${url}</a>`;
     resultsList.appendChild(li);
-
     imagesFound++;
     imagesFoundText.textContent = "Images found: " + imagesFound;
-
-    if (resultsList.children.length === 1) {
-        downloadBtn.style.display = "inline-block";
-    }
+    if (resultsList.children.length === 1) downloadBtn.style.display = "inline-block";
 });
 
-// --- Scan complete ---
+// --- Scan Complete ---
 window.electronAPI.receive("scan-complete", () => {
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
-
-    // Update UI
     if (resultsList.children.length > 0) {
         statusText.textContent = "Status: Scan complete. Ready to download.";
-
-        resultsList.querySelectorAll("li.pending").forEach(li => {
-            li.className = "ready";
-        });
+        resultsList.querySelectorAll("li.pending").forEach(li => li.className = "ready");
     } else {
         statusText.textContent = "Status: Scan complete — no results found.";
     }
 });
 
-// --- Options Modal Logic ---
-const optionsModal = document.getElementById("optionsModal");
-const optionsButton = document.getElementById("optionsBtn");
-const cancelOptions = document.getElementById("cancelOptions");
-const saveOptions = document.getElementById("saveOptions");
-const resetOptions = document.getElementById("resetOptions");
-const maxConnections = document.getElementById("maxConnections");
-const maxConnectionsValue = document.getElementById("maxConnectionsValue");
-
-optionsButton.addEventListener("click", () => {
-    optionsModal.style.display = "block";
-});
-cancelOptions.addEventListener("click", () => {
-    optionsModal.style.display = "none";
-});
-maxConnections.addEventListener("input", () => {
-    maxConnectionsValue.textContent = maxConnections.value;
-});
-
-saveOptions.addEventListener("click", () => {
-    const selectedExts = Array.from(
-        document.querySelectorAll(".ext-option:checked")
-    ).map(cb => cb.value);
-
-    const hostList = document.getElementById("hostList").value
-        .split("\n")
-        .map(h => h.trim().toLowerCase())
-        .filter(Boolean);
-
-    const newOptions = {
-        prefix: document.getElementById("prefix").value.trim(),
-        savePath: document.getElementById("savePath").value.trim(),
-        createSubfolder: document.getElementById("subfolder").checked,
-        indexing: document.querySelector('input[name="indexing"]:checked').value,
-        maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
-        debugLogging: document.getElementById("debugLogging").checked,
-        validExtensions: selectedExts,
-        validHosts: hostList,
-        bottomPanelHeight: parseInt(bottomPanel.style.height, 10) || null
-    };
-    console.log("[Renderer] Saving options:", newOptions);
-    window.electronAPI.send("options:save", newOptions);
-    optionsModal.style.display = "none";
-});
-
-// --- Reset Options ---
-resetOptions.addEventListener("click", () => {
-    if (!confirm("Are you sure you want to reset all options to defaults?")) return;
-    console.log("[Renderer] Resetting options to defaults...");
-    window.electronAPI.send("options:reset");
-});
-
 // --- Helpers ---
-function sanitizeFilename(name) {
-    return name.replace(/[<>:"/\\|?*]+/g, "_");
-}
+function sanitizeFilename(name) { return name.replace(/[<>:"/\\|?*]+/g, "_"); }
 function isAllowedExtension(url, allowed) {
     if (!url) return false;
     const clean = url.split("?")[0].toLowerCase();
@@ -277,96 +279,26 @@ function deriveSlugFromUrl(url) {
         let slug = u.pathname.split("/").filter(Boolean).pop();
         if (!slug || slug.length < 2) slug = u.hostname.replace(/^www\./, "");
         return sanitizeFilename(slug);
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
-// --- Download Manifest ---
-downloadBtn.addEventListener("click", async () => {
-    console.log("[Renderer] Download button clicked");
-
-    downloadBtn.style.display = "none";
-    cancelBtn.style.display = "inline-block";
-
-    const options = {
-        prefix: document.getElementById("prefix").value.trim(),
-        savePath: document.getElementById("savePath").value.trim() || "PixReaper",
-        createSubfolder: document.getElementById("subfolder").checked,
-        indexing: document.querySelector('input[name="indexing"]:checked').value,
-    };
-
-    const items = resultsList.querySelectorAll("li a");
-    const padWidth = String(items.length).length;
-
-    currentManifest = [];
-    const allowedExts = Array.from(
-        document.querySelectorAll(".ext-option:checked")
-    ).map(cb => cb.value.toLowerCase());
-
-    let folder = options.savePath;
-    if (options.createSubfolder) {
-        const currentUrl = await webview.getURL();
-        let slug = deriveSlugFromUrl(currentUrl);
-        if (!slug) slug = "Scan_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-        folder = `${folder}/${slug}`;
-    }
-
-    items.forEach((link) => {
-        const url = link.getAttribute("href");
-        if (!isAllowedExtension(url, allowedExts)) return;
-
-        const index = currentManifest.length + 1;
-        let base = url.split("/").pop().split("?")[0] || "image";
-        base = sanitizeFilename(base);
-        if (!base.includes(".")) base += ".jpg";
-
-        const filename = options.indexing === "order"
-            ? `${options.prefix}${String(index).padStart(padWidth, "0")}_${base}`
-            : `${options.prefix}${base}`;
-
-        const savePath = `${folder}/${filename}`;
-        currentManifest.push({ index, url, status: "pending", filename, savePath });
-        link.closest("li").setAttribute("data-index", index);
-    });
-
-    downloadTotal = currentManifest.length;
-    downloadCompleted = 0;
-    statusText.textContent = `Status: Downloading (0/${downloadTotal}) — 0%`;
-    progressBar.style.width = "0%";
-
-    window.electronAPI.send("download:start", {
-        manifest: currentManifest,
-        options: {
-            ...options,
-            debugLogging: document.getElementById("debugLogging").checked
-        }
-    });
-});
-
-// --- IPC: Options Load/Save ---
+// --- IPC: Options Load ---
 window.electronAPI.receive("options:load", (opt) => {
     console.log("[Renderer] Loaded options:", opt);
+
     document.getElementById("prefix").value = opt.prefix ?? "";
     document.getElementById("savePath").value = opt.savePath ?? "";
     document.getElementById("subfolder").checked = !!opt.createSubfolder;
 
     const indexing = opt.indexing ?? "order";
-    document.querySelectorAll('input[name="indexing"]').forEach((radio) => {
-        radio.checked = radio.value === indexing;
-    });
+    document.querySelectorAll('input[name="indexing"]').forEach(r => r.checked = r.value === indexing);
+    document.getElementById("debugLogging").checked = !!opt.debugLogging;
 
     const slider = document.getElementById("maxConnections");
     slider.value = opt.maxConnections ?? 10;
-    maxConnectionsValue.textContent = slider.value;
+    document.getElementById("maxConnectionsValue").textContent = slider.value;
 
-    document.getElementById("debugLogging").checked = !!opt.debugLogging;
-
-    const allowed = opt.validExtensions ?? ["jpg", "jpeg"];
-    document.querySelectorAll(".ext-option").forEach(cb => {
-        cb.checked = allowed.includes(cb.value);
-    });
-
+    document.querySelectorAll(".ext-option").forEach(cb => cb.checked = (opt.validExtensions ?? []).includes(cb.value));
     document.getElementById("hostList").value = (opt.validHosts ?? []).join("\n");
 
     if (opt.bottomPanelHeight) {
@@ -374,68 +306,16 @@ window.electronAPI.receive("options:load", (opt) => {
         bottomPanel.style.flex = "0 0 auto";
     }
 
-    // ✅ Restore last visited URL (if exists)
+    // ✅ Bookmarks
+    currentBookmarks = opt.bookmarks ?? [];
+    refreshBookmarkList();
+
+    // ✅ Restore last URL
     if (opt.lastUrl && opt.lastUrl !== "about:blank") {
-        console.log("[Renderer] Restoring last URL:", opt.lastUrl);
         urlInput.value = opt.lastUrl;
         navigateTo(opt.lastUrl);
     } else {
         urlInput.value = "about:blank";
         navigateTo("about:blank");
     }
-});
-
-window.electronAPI.receive("options:saved", (saved) => {
-    console.log("[Renderer] Options saved:", saved);
-});
-
-// --- IPC: Download Progress ---
-window.electronAPI.receive("download:progress", (data) => {
-    downloadCompleted = currentManifest.filter(e => e.status === "success").length;
-    const percent = ((downloadCompleted / downloadTotal) * 100).toFixed(1);
-    statusText.textContent = `Status: Downloading (${downloadCompleted}/${downloadTotal}) — ${percent}%`;
-    progressBar.style.width = `${percent}%`;
-
-    const { index, status, savePath } = data;
-    const entry = currentManifest.find(e => e.index === index);
-    if (entry) entry.status = status;
-
-    const li = resultsList.querySelector(`li[data-index="${index}"]`);
-    if (li) {
-        li.className = status;
-        const icon = li.querySelector(".status-icon");
-        if (icon) icon.className = `status-icon ${status}`;
-
-        const link = li.querySelector("a");
-        if (link) {
-            if (status === "success") {
-                link.textContent = savePath;
-                link.href = "file:///" + savePath.replace(/\\/g, "/");
-                link.target = "_blank";
-                link.style.color = "";
-            } else if (status === "retrying") {
-                link.textContent = "Retrying download...";
-                link.removeAttribute("href");
-                link.style.color = "orange";
-            } else if (status === "failed") {
-                link.textContent = "Failed (click to inspect): " + (entry.url || link.textContent);
-                link.href = entry.url;
-                link.target = "_blank";
-                link.style.color = "red";
-            } else if (status === "cancelled") {
-                link.textContent = "Cancelled: " + (entry.url || link.textContent);
-                link.removeAttribute("href");
-                link.style.color = "gray";
-            }
-        }
-    }
-});
-
-// --- IPC: Download Complete ---
-window.electronAPI.receive("download:complete", () => {
-    console.log("[Renderer] All downloads complete.");
-    cancelBtn.style.display = "none";
-    cancelBtn.disabled = false;
-    statusText.textContent = "Status: All downloads complete.";
-    progressBar.style.width = "100%";
 });

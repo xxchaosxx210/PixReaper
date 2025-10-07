@@ -34,7 +34,6 @@ function createWindow() {
         mainWindow.webContents.send("options:load", currentOptions);
     });
 
-    // Debug: catch load errors
     mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
         console.error("[Main] did-fail-load:", code, desc, url);
     });
@@ -50,11 +49,71 @@ app.whenReady().then(() => {
     // IPC: save options from renderer
     ipcMain.on("options:save", (event, newOptions) => {
         const saved = optionsManager.saveOptions(newOptions);
-        setDebug(!!saved.debugLogging); // ✅ update logger
+        setDebug(!!saved.debugLogging);
         event.sender.send("options:saved", saved);
-        // ✅ Don’t re-send "options:load" if this was just a quick save (avoids reload loop)
+
+        // Avoid reload loop when only saving lastUrl
         if (!newOptions.lastUrl) {
             mainWindow.webContents.send("options:load", saved);
+        }
+    });
+
+    // ✅ IPC: Add bookmark
+    ipcMain.on("options:addBookmark", (event, bookmark) => {
+        try {
+            const options = optionsManager.loadOptions();
+            options.bookmarks = options.bookmarks || [];
+
+            // Prevent duplicates
+            const exists = options.bookmarks.some(
+                (b) => b.url.toLowerCase() === bookmark.url.toLowerCase()
+            );
+
+            if (!exists && bookmark.url) {
+                options.bookmarks.push({
+                    title: bookmark.title || bookmark.url,
+                    url: bookmark.url,
+                });
+
+                const saved = optionsManager.saveOptions(options);
+                logDebug("[Main] Added new bookmark:", bookmark);
+
+                // Send updated options back to renderer
+                mainWindow.webContents.send("options:load", saved);
+                event.sender.send("options:saved", saved);
+            } else {
+                logDebug("[Main] Bookmark already exists or invalid:", bookmark);
+            }
+        } catch (err) {
+            logError("[Main] Failed to add bookmark:", err);
+        }
+    });
+
+    // ✅ IPC: Remove bookmark
+    ipcMain.on("options:removeBookmark", (event, urlToRemove) => {
+        if (!urlToRemove) return;
+
+        try {
+            const options = optionsManager.loadOptions();
+            options.bookmarks = options.bookmarks || [];
+
+            const beforeCount = options.bookmarks.length;
+            options.bookmarks = options.bookmarks.filter(
+                (b) => b.url.toLowerCase() !== urlToRemove.toLowerCase()
+            );
+
+            if (options.bookmarks.length < beforeCount) {
+                const saved = optionsManager.saveOptions(options);
+                logDebug("[Main] Removed bookmark:", urlToRemove);
+
+                // Update UI with refreshed bookmark list
+                mainWindow.webContents.send("options:load", saved);
+                event.sender.send("options:saved", saved);
+            } else {
+                logDebug("[Main] No matching bookmark found for removal:", urlToRemove);
+            }
+        } catch (err) {
+            logError("[Main] Failed to remove bookmark:", err);
         }
     });
 
@@ -83,13 +142,9 @@ app.whenReady().then(() => {
                         return;
                     }
 
-                    event.sender.send("download:progress", {
-                        index,
-                        status,
-                        savePath,
-                    });
+                    event.sender.send("download:progress", { index, status, savePath });
                 },
-                () => cancelDownload // ✅ pass cancel flag callback
+                () => cancelDownload
             );
 
             if (!cancelDownload) {
@@ -121,16 +176,13 @@ app.whenReady().then(() => {
     });
 });
 
+// --- APP Events ---
 app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") {
-        app.quit();
-    }
+    if (process.platform !== "darwin") app.quit();
 });
 
 app.on("activate", () => {
-    if (mainWindow === null) {
-        createWindow();
-    }
+    if (mainWindow === null) createWindow();
 });
 
 // --- IPC: Scan Page ---

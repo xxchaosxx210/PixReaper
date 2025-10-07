@@ -14,13 +14,11 @@ const optionsFilePath = path.join(__dirname, "options.json");
 const DEFAULT_OPTIONS = {
     prefix: "",
     savePath: path.join(os.homedir(), "Downloads", "PixReaper"),
-    createSubfolder: true,   // if true: try to use page URL slug, else fallback to timestamp
+    createSubfolder: true,
     maxConnections: 10,
-    indexing: "order",       // "order" or "none"
-    debugLogging: false,     // toggle debug logging
-    validExtensions: ["jpg", "jpeg"], // ✅ default allowed extensions
-
-    // ✅ Default supported hosts (can be edited in Options UI)
+    indexing: "order",
+    debugLogging: false,
+    validExtensions: ["jpg", "jpeg"],
     validHosts: [
         "pixhost.to",
         "imagebam.com",
@@ -36,120 +34,89 @@ const DEFAULT_OPTIONS = {
         "radikal.ru",
         "imageupper.com"
     ],
-
-    // ✅ New: Remember last visited URL (for persistence)
-    lastUrl: "about:blank"
+    lastUrl: "about:blank",
+    bookmarks: [] // { title, url }
 };
 
-/**
- * Safely load options from disk.
- * Falls back to DEFAULT_OPTIONS if file is missing or invalid.
- */
+/** Ensure config directory and file exist */
+function ensureFileExists() {
+    const dir = path.dirname(optionsFilePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    if (!fs.existsSync(optionsFilePath)) {
+        fs.writeFileSync(optionsFilePath, JSON.stringify(DEFAULT_OPTIONS, null, 2), "utf8");
+    }
+}
+
+/** Safely load options from disk */
 function loadOptions() {
+    ensureFileExists();
+
     try {
-        if (fs.existsSync(optionsFilePath)) {
-            const raw = fs.readFileSync(optionsFilePath, "utf-8");
-            const parsed = JSON.parse(raw);
+        const raw = fs.readFileSync(optionsFilePath, "utf8");
+        const parsed = JSON.parse(raw);
 
-            // Merge with defaults so new keys (like lastUrl) get added automatically
-            const merged = { ...DEFAULT_OPTIONS, ...parsed };
+        // Merge parsed with defaults (preserving new keys)
+        const merged = { ...DEFAULT_OPTIONS, ...parsed };
 
-            // ✅ Ensure savePath is valid and normalized
-            if (!merged.savePath || typeof merged.savePath !== "string") {
-                merged.savePath = DEFAULT_OPTIONS.savePath;
-            } else {
-                merged.savePath = path.normalize(merged.savePath);
-            }
+        // --- Normalize ---
+        merged.savePath = typeof merged.savePath === "string"
+            ? path.normalize(merged.savePath)
+            : DEFAULT_OPTIONS.savePath;
 
-            // ✅ Ensure numeric and string validations
-            if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
-                merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
-            }
+        if (!Array.isArray(merged.validExtensions))
+            merged.validExtensions = [...DEFAULT_OPTIONS.validExtensions];
+        else
+            merged.validExtensions = merged.validExtensions.map(ext =>
+                String(ext).toLowerCase().replace(/^\./, "")
+            );
 
-            // ✅ Normalize extensions
-            if (!Array.isArray(merged.validExtensions)) {
-                merged.validExtensions = [...DEFAULT_OPTIONS.validExtensions];
-            } else {
-                merged.validExtensions = merged.validExtensions.map(ext =>
-                    String(ext).toLowerCase().replace(/^\./, "")
-                );
-            }
+        if (!Array.isArray(merged.validHosts))
+            merged.validHosts = [...DEFAULT_OPTIONS.validHosts];
+        else
+            merged.validHosts = merged.validHosts.map(h =>
+                String(h).toLowerCase().replace(/^www\./, "")
+            );
 
-            // ✅ Normalize hosts
-            if (!Array.isArray(merged.validHosts)) {
-                merged.validHosts = [...DEFAULT_OPTIONS.validHosts];
-            } else {
-                merged.validHosts = merged.validHosts.map(h =>
-                    String(h).toLowerCase().replace(/^www\./, "")
-                );
-            }
+        // --- Validate bookmarks ---
+        if (!Array.isArray(merged.bookmarks)) merged.bookmarks = [];
+        merged.bookmarks = merged.bookmarks
+            .filter(b => b && b.url)
+            .map(b => ({
+                title: String(b.title || b.url).trim(),
+                url: String(b.url).trim()
+            }));
 
-            // ✅ Ensure lastUrl is a valid string
-            if (typeof merged.lastUrl !== "string" || !merged.lastUrl.trim()) {
-                merged.lastUrl = DEFAULT_OPTIONS.lastUrl;
-            }
-
-            return merged;
-        }
+        return merged;
     } catch (err) {
         console.error("[OptionsManager] Failed to load options:", err);
+        return { ...DEFAULT_OPTIONS };
     }
-
-    return { ...DEFAULT_OPTIONS };
 }
 
-/**
- * Save options to disk, merging with defaults.
- * Returns the final saved object.
- */
+/** Save options to disk, merging with current file */
 function saveOptions(newOptions = {}) {
+    ensureFileExists();
+
     const current = loadOptions();
-    const merged = { ...current, ...newOptions };
-
-    // ✅ Validate & normalize savePath
-    if (!merged.savePath || typeof merged.savePath !== "string") {
-        merged.savePath = DEFAULT_OPTIONS.savePath;
-    } else {
-        merged.savePath = path.normalize(merged.savePath);
-    }
-
-    // ✅ Validate numeric field
-    if (typeof merged.maxConnections !== "number" || merged.maxConnections <= 0) {
-        merged.maxConnections = DEFAULT_OPTIONS.maxConnections;
-    }
-
-    // ✅ Normalize extensions before saving
-    if (!Array.isArray(merged.validExtensions)) {
-        merged.validExtensions = [...DEFAULT_OPTIONS.validExtensions];
-    } else {
-        merged.validExtensions = merged.validExtensions.map(ext =>
-            String(ext).toLowerCase().replace(/^\./, "")
-        );
-    }
-
-    // ✅ Normalize hosts before saving
-    if (!Array.isArray(merged.validHosts)) {
-        merged.validHosts = [...DEFAULT_OPTIONS.validHosts];
-    } else {
-        merged.validHosts = merged.validHosts.map(h =>
-            String(h).toLowerCase().replace(/^www\./, "")
-        );
-    }
-
-    // ✅ Ensure lastUrl always exists as a string
-    if (typeof merged.lastUrl !== "string" || !merged.lastUrl.trim()) {
-        merged.lastUrl = DEFAULT_OPTIONS.lastUrl;
-    }
+    const merged = {
+        ...current,
+        ...newOptions,
+        bookmarks: Array.isArray(newOptions.bookmarks)
+            ? newOptions.bookmarks
+            : current.bookmarks
+    };
 
     try {
-        fs.writeFileSync(optionsFilePath, JSON.stringify(merged, null, 2), "utf-8");
+        fs.writeFileSync(optionsFilePath, JSON.stringify(merged, null, 2), "utf8");
+        return merged;
     } catch (err) {
         console.error("[OptionsManager] Failed to save options:", err);
+        return current;
     }
-
-    return merged;
 }
 
+/** Return defaults */
 function getDefaultOptions() {
     return { ...DEFAULT_OPTIONS };
 }
