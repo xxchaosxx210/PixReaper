@@ -1,8 +1,8 @@
 {
   "prefix": "",
-  "savePath": "C:\\Users\\chaos\\Downloads\\PixReaper",
+  "savePath": "C:\\Users\\chaos\\Downloads\\",
   "createSubfolder": true,
-  "maxConnections": 10,
+  "maxConnections": 13,
   "indexing": "order",
   "debugLogging": true,
   "validExtensions": [
