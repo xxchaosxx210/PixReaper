@@ -76,7 +76,6 @@ app.whenReady().then(() => {
                 });
 
                 const saved = optionsManager.saveOptions(options);
-                logDebug("[Main] Added new bookmark:", bookmark);
 
                 // Send updated options back to renderer
                 mainWindow.webContents.send("options:load", saved);
@@ -104,7 +103,6 @@ app.whenReady().then(() => {
 
             if (options.bookmarks.length < beforeCount) {
                 const saved = optionsManager.saveOptions(options);
-                logDebug("[Main] Removed bookmark:", urlToRemove);
 
                 // Update UI with refreshed bookmark list
                 mainWindow.webContents.send("options:load", saved);
