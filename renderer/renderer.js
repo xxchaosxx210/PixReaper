@@ -1,6 +1,17 @@
 // renderer.js
 // Handles UI interactions and IPC for PixReaper
 
+// --- Logging bridge (unified logger for renderer) ---
+function logInfo(...args) {
+    window.electronAPI.send("log:info", args);
+}
+function logDebug(...args) {
+    window.electronAPI.send("log:debug", args);
+}
+function logError(...args) {
+    window.electronAPI.send("log:error", args);
+}
+
 // --- Webview Controls ---
 const webview = document.getElementById("browserView");
 const urlInput = document.getElementById("urlInput");
@@ -19,9 +30,10 @@ function navigateTo(rawUrl) {
     let url = rawUrl.trim();
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
     try {
+        logInfo("[Renderer] Navigating to:", url);
         webview.loadURL(url);
     } catch (err) {
-        console.error("[Renderer] Failed to load URL:", err);
+        logError("[Renderer] Failed to load URL:", err);
     }
 }
 
@@ -89,6 +101,7 @@ addBookmarkBtn.addEventListener("click", () => {
     }
     showPrompt("Enter a title for this bookmark:", currentUrl, (title) => {
         if (!title) return;
+        logInfo("[Renderer] Adding bookmark:", title, currentUrl);
         window.electronAPI.send("options:addBookmark", { title, url: currentUrl });
     });
 });
@@ -100,15 +113,22 @@ removeBookmarkBtn.addEventListener("click", () => {
         return;
     }
     if (!confirm("Remove this bookmark?")) return;
+    logInfo("[Renderer] Removing bookmark:", selectedUrl);
     window.electronAPI.send("options:removeBookmark", selectedUrl);
 });
 
 // --- Folder Picker ---
 browsePathBtn.addEventListener("click", () => {
+    logDebug("[Renderer] Opening folder picker...");
     window.electronAPI.send("choose-folder");
 });
 window.electronAPI.receive("choose-folder:result", (folderPath) => {
-    if (folderPath) document.getElementById("savePath").value = folderPath;
+    if (folderPath) {
+        document.getElementById("savePath").value = folderPath;
+        logDebug("[Renderer] Folder selected:", folderPath);
+    } else {
+        logDebug("[Renderer] Folder picker cancelled.");
+    }
 });
 
 // --- Toggle Webview Visibility ---
@@ -120,6 +140,7 @@ toggleViewBtn.addEventListener("click", () => {
     const isHidden = webview.classList.toggle("hidden");
     splitter.style.display = isHidden ? "none" : "block";
     toggleViewBtn.textContent = isHidden ? "🖥️ Show View" : "🖥️ Hide View";
+    logInfo(`[Renderer] Webview ${isHidden ? "hidden" : "shown"}.`);
     if (isHidden) {
         bottomPanel.style.height = "auto";
         bottomPanel.style.flex = "1 1 auto";
@@ -151,18 +172,19 @@ window.addEventListener("mouseup", (e) => {
         const newHeight = window.innerHeight - e.clientY;
         const clamped = Math.min(Math.max(newHeight, 60), window.innerHeight * 0.7);
         window.electronAPI.send("options:save", { bottomPanelHeight: clamped });
+        logDebug("[Renderer] Resized bottom panel to:", clamped, "px");
     }
 });
 
 // --- Navigation ---
-goButton.addEventListener("click", () => {
-    navigateTo(urlInput.value);
-});
+goButton.addEventListener("click", () => navigateTo(urlInput.value));
 webview.addEventListener("did-navigate", (event) => {
     const currentUrl = event.url;
     urlInput.value = currentUrl;
-    if (currentUrl && currentUrl !== "about:blank")
+    if (currentUrl && currentUrl !== "about:blank") {
         window.electronAPI.send("options:save", { lastUrl: currentUrl });
+        logDebug("[Renderer] Navigated to:", currentUrl);
+    }
 });
 
 // --- Results & Status ---
@@ -199,6 +221,8 @@ scanButton.addEventListener("click", async () => {
     const filteredLinks = validHosts.length > 0
         ? rawLinks.filter(href => validHosts.some(host => href.toLowerCase().includes(host)))
         : rawLinks;
+
+    logInfo(`[Renderer] Scanning ${filteredLinks.length} links...`);
     window.electronAPI.send("scan-page", filteredLinks);
 });
 
@@ -219,7 +243,6 @@ window.electronAPI.receive("scan-progress", (data) => {
     if (resultsList.children.length === 1) downloadBtn.style.display = "inline-block";
 });
 
-// --- Scan Complete ---
 window.electronAPI.receive("scan-complete", () => {
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
@@ -229,10 +252,12 @@ window.electronAPI.receive("scan-complete", () => {
     } else {
         statusText.textContent = "Status: Scan complete — no results found.";
     }
+    logInfo("[Renderer] Scan complete.");
 });
 
 // --- Cancel Scan ---
 cancelBtn.addEventListener("click", () => {
+    logInfo("[Renderer] Cancelling scan...");
     window.electronAPI.send("scan:cancel");
     cancelBtn.disabled = true;
 });
@@ -247,27 +272,22 @@ const maxConnections = document.getElementById("maxConnections");
 const maxConnectionsValue = document.getElementById("maxConnectionsValue");
 
 optionsButton.addEventListener("click", () => {
+    logDebug("[Renderer] Opening options modal...");
     optionsModal.style.display = "block";
 });
-
 cancelOptions.addEventListener("click", () => {
+    logDebug("[Renderer] Closing options modal...");
     optionsModal.style.display = "none";
 });
-
 maxConnections.addEventListener("input", () => {
     maxConnectionsValue.textContent = maxConnections.value;
 });
-
 saveOptions.addEventListener("click", () => {
-    const selectedExts = Array.from(
-        document.querySelectorAll(".ext-option:checked")
-    ).map(cb => cb.value);
-
+    const selectedExts = Array.from(document.querySelectorAll(".ext-option:checked")).map(cb => cb.value);
     const hostList = document.getElementById("hostList").value
         .split("\n")
         .map(h => h.trim().toLowerCase())
         .filter(Boolean);
-
     const newOptions = {
         prefix: document.getElementById("prefix").value.trim(),
         savePath: document.getElementById("savePath").value.trim(),
@@ -279,18 +299,15 @@ saveOptions.addEventListener("click", () => {
         validHosts: hostList,
         bottomPanelHeight: parseInt(bottomPanel.style.height, 10) || null
     };
-
-    console.log("[Renderer] Saving options:", newOptions);
+    logInfo("[Renderer] Saving options:", newOptions);
     window.electronAPI.send("options:save", newOptions);
     optionsModal.style.display = "none";
 });
-
 resetOptions.addEventListener("click", () => {
     if (!confirm("Are you sure you want to reset all options to defaults?")) return;
-    console.log("[Renderer] Resetting options to defaults...");
+    logInfo("[Renderer] Resetting options to defaults...");
     window.electronAPI.send("options:reset");
 });
-
 
 // --- Helpers ---
 function sanitizeFilename(name) { return name.replace(/[<>:"/\\|?*]+/g, "_"); }
@@ -312,6 +329,7 @@ function deriveSlugFromUrl(url) {
 downloadBtn.addEventListener("click", async () => {
     downloadBtn.style.display = "none";
     cancelBtn.style.display = "inline-block";
+    logInfo("[Renderer] Preparing download manifest...");
 
     const options = {
         prefix: document.getElementById("prefix").value.trim(),
@@ -322,10 +340,8 @@ downloadBtn.addEventListener("click", async () => {
 
     const items = resultsList.querySelectorAll("li a");
     const padWidth = String(items.length).length;
-
     currentManifest = [];
-    const allowedExts = Array.from(document.querySelectorAll(".ext-option:checked"))
-        .map(cb => cb.value.toLowerCase());
+    const allowedExts = Array.from(document.querySelectorAll(".ext-option:checked")).map(cb => cb.value.toLowerCase());
 
     let folder = options.savePath;
     if (options.createSubfolder) {
@@ -338,7 +354,6 @@ downloadBtn.addEventListener("click", async () => {
     items.forEach((link) => {
         const url = link.getAttribute("href");
         if (!isAllowedExtension(url, allowedExts)) return;
-
         const index = currentManifest.length + 1;
         let base = url.split("/").pop().split("?")[0] || "image";
         base = sanitizeFilename(base);
@@ -356,6 +371,7 @@ downloadBtn.addEventListener("click", async () => {
     statusText.textContent = `Status: Downloading (0/${downloadTotal}) — 0%`;
     progressBar.style.width = "0%";
 
+    logInfo(`[Renderer] Sending ${downloadTotal} downloads to main process.`);
     window.electronAPI.send("download:start", {
         manifest: currentManifest,
         options: { ...options, debugLogging: document.getElementById("debugLogging").checked }
@@ -368,7 +384,6 @@ window.electronAPI.receive("download:progress", (data) => {
     const percent = ((downloadCompleted / downloadTotal) * 100).toFixed(1);
     statusText.textContent = `Status: Downloading (${downloadCompleted}/${downloadTotal}) — ${percent}%`;
     progressBar.style.width = `${percent}%`;
-
     const { index, status, savePath } = data;
     const entry = currentManifest.find(e => e.index === index);
     if (entry) entry.status = status;
@@ -397,12 +412,12 @@ window.electronAPI.receive("download:progress", (data) => {
     }
 });
 
-// --- Download Complete ---
 window.electronAPI.receive("download:complete", () => {
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
     statusText.textContent = "Status: All downloads complete.";
     progressBar.style.width = "100%";
+    logInfo("[Renderer] All downloads complete.");
 });
 
 // --- IPC: Options Load ---
@@ -437,4 +452,7 @@ window.electronAPI.receive("options:load", (opt) => {
         urlInput.value = "about:blank";
         navigateTo("about:blank");
     }
+
+    logDebug("[Renderer] Options loaded:", opt);
 });
+

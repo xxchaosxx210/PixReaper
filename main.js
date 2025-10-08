@@ -3,7 +3,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
 const { resolveLink } = require("./logic/hostResolver");
-const { logDebug, logError, setDebug } = require("./utils/logger");
+const { logDebug, logInfo, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
 
@@ -11,6 +11,7 @@ let mainWindow;
 let cancelScan = false;
 let cancelDownload = false;
 
+/* -------------------- Window Creation -------------------- */
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 800,
@@ -25,27 +26,33 @@ function createWindow() {
     });
 
     mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+    logInfo("[Main] Browser window created and renderer loaded.");
 
     // When the renderer has loaded, send current options (including lastUrl)
     mainWindow.webContents.on("did-finish-load", () => {
+        if (!mainWindow?.webContents) return;
         const currentOptions = optionsManager.loadOptions();
         setDebug(!!currentOptions.debugLogging);
         mainWindow.webContents.send("options:load", currentOptions);
+        logInfo("[Main] Renderer finished loading. Options sent to renderer.");
     });
 
     mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
-        console.error("[Main] did-fail-load:", code, desc, url);
+        logError(`[Main] did-fail-load: ${code} ${desc} ${url}`);
     });
 
     mainWindow.on("closed", () => {
+        logInfo("[Main] Main window closed.");
         mainWindow = null;
     });
 }
 
+/* -------------------- App Ready -------------------- */
 app.whenReady().then(() => {
+    logInfo("[App] Application is ready.");
     createWindow();
 
-    // IPC: save options from renderer
+    /* ---------- IPC: Options ---------- */
     ipcMain.on("options:save", (event, newOptions) => {
         const saved = optionsManager.saveOptions(newOptions);
         setDebug(!!saved.debugLogging);
@@ -53,18 +60,17 @@ app.whenReady().then(() => {
 
         // Avoid reload loop when only saving lastUrl
         if (!("lastUrl" in newOptions)) {
-            mainWindow.webContents.send("options:load", saved);
+            if (mainWindow?.webContents) mainWindow.webContents.send("options:load", saved);
         }
 
+        logInfo("[IPC] Options saved and reloaded.");
     });
 
-    // ✅ IPC: Add bookmark
     ipcMain.on("options:addBookmark", (event, bookmark) => {
         try {
             const options = optionsManager.loadOptions();
             options.bookmarks = options.bookmarks || [];
 
-            // Prevent duplicates
             const exists = options.bookmarks.some(
                 (b) => b.url.toLowerCase() === bookmark.url.toLowerCase()
             );
@@ -76,19 +82,17 @@ app.whenReady().then(() => {
                 });
 
                 const saved = optionsManager.saveOptions(options);
-
-                // Send updated options back to renderer
-                mainWindow.webContents.send("options:load", saved);
+                if (mainWindow?.webContents) mainWindow.webContents.send("options:load", saved);
                 event.sender.send("options:saved", saved);
+                logInfo(`[IPC] Bookmark added: ${bookmark.url}`);
             } else {
-                logDebug("[Main] Bookmark already exists or invalid:", bookmark);
+                logDebug("[IPC] Bookmark already exists or invalid:", bookmark);
             }
         } catch (err) {
-            logError("[Main] Failed to add bookmark:", err);
+            logError("[IPC] Failed to add bookmark:", err);
         }
     });
 
-    // ✅ IPC: Remove bookmark
     ipcMain.on("options:removeBookmark", (event, urlToRemove) => {
         if (!urlToRemove) return;
 
@@ -103,30 +107,29 @@ app.whenReady().then(() => {
 
             if (options.bookmarks.length < beforeCount) {
                 const saved = optionsManager.saveOptions(options);
-
-                // Update UI with refreshed bookmark list
-                mainWindow.webContents.send("options:load", saved);
+                if (mainWindow?.webContents) mainWindow.webContents.send("options:load", saved);
                 event.sender.send("options:saved", saved);
+                logInfo(`[IPC] Bookmark removed: ${urlToRemove}`);
             } else {
-                logDebug("[Main] No matching bookmark found for removal:", urlToRemove);
+                logDebug("[IPC] No matching bookmark found for removal:", urlToRemove);
             }
         } catch (err) {
-            logError("[Main] Failed to remove bookmark:", err);
+            logError("[IPC] Failed to remove bookmark:", err);
         }
     });
 
-    // IPC: reset options to defaults
     ipcMain.on("options:reset", (event) => {
         const defaults = optionsManager.getDefaultOptions();
         const saved = optionsManager.saveOptions(defaults);
         setDebug(!!saved.debugLogging);
-        mainWindow.webContents.send("options:load", saved);
+        if (mainWindow?.webContents) mainWindow.webContents.send("options:load", saved);
         event.sender.send("options:saved", saved);
+        logInfo("[IPC] Options reset to defaults.");
     });
 
-    // IPC: start downloads
+    /* ---------- IPC: Downloads ---------- */
     ipcMain.on("download:start", async (event, { manifest, options }) => {
-        logDebug("[Main] Starting downloads:", manifest.length, "files");
+        logInfo(`[Download] Starting download of ${manifest.length} files.`);
         cancelDownload = false;
 
         try {
@@ -135,64 +138,72 @@ app.whenReady().then(() => {
                 options,
                 (index, status, savePath) => {
                     if (cancelDownload) {
-                        logDebug("[Main] Download cancelled.");
+                        logInfo("[Download] Download cancelled mid-process.");
                         event.sender.send("download:complete");
                         return;
                     }
-
                     event.sender.send("download:progress", { index, status, savePath });
                 },
                 () => cancelDownload
             );
 
             if (!cancelDownload) {
-                logDebug("[Main] All downloads finished.");
+                logInfo("[Download] All downloads completed successfully.");
                 event.sender.send("download:complete");
             }
         } catch (err) {
-            logError("[Main] Download error:", err);
+            logError("[Download] Download error:", err);
         }
     });
 
-    // IPC: cancel download
-    ipcMain.on("download:cancel", (event) => {
-        logDebug("[Main] Cancelling downloads...");
+    ipcMain.on("download:cancel", () => {
+        logInfo("[Download] Cancelling downloads...");
         cancelDownload = true;
     });
 
-    // IPC: folder picker
+    /* ---------- IPC: Folder Picker ---------- */
     ipcMain.on("choose-folder", async (event) => {
+        logDebug("[Dialog] Folder picker opened.");
         const result = await dialog.showOpenDialog(mainWindow, {
             properties: ["openDirectory", "createDirectory"],
         });
 
         if (!result.canceled && result.filePaths.length > 0) {
+            logDebug("[Dialog] Folder selected:", result.filePaths[0]);
             event.sender.send("choose-folder:result", result.filePaths[0]);
         } else {
+            logDebug("[Dialog] Folder selection cancelled.");
             event.sender.send("choose-folder:result", null);
         }
     });
+
+    /* ---------- IPC: Logging bridge from renderer ---------- */
+    ipcMain.on("log:debug", (_event, args) => logDebug(...args));
+    ipcMain.on("log:info", (_event, args) => logInfo(...args));
+    ipcMain.on("log:error", (_event, args) => logError(...args));
 });
 
-// --- APP Events ---
+/* -------------------- App Events -------------------- */
 app.on("window-all-closed", () => {
+    logInfo("[App] All windows closed.");
     if (process.platform !== "darwin") app.quit();
 });
 
 app.on("activate", () => {
+    logInfo("[App] Activating application.");
     if (mainWindow === null) createWindow();
 });
 
-// --- IPC: Scan Page ---
+/* -------------------- IPC: Scan Page -------------------- */
 const CONCURRENCY = 8;
 
 ipcMain.on("scan-page", async (event, links) => {
-    logDebug("[Main] Received links:", links);
+    logInfo(`[Scan] Received ${links.length} links for resolution.`);
     cancelScan = false;
 
     for (let i = 0; i < links.length; i += CONCURRENCY) {
         if (cancelScan) {
-            logDebug("[Main] Scan cancelled.");
+            logInfo("[Scan] Scan cancelled by user.");
             event.sender.send("scan-complete");
             return;
         }
@@ -210,10 +221,10 @@ ipcMain.on("scan-page", async (event, links) => {
                             resolved,
                             status: resolved ? "success" : "failed",
                         });
-                        logDebug("[Main] Resolved:", link, "->", resolved);
+                        logDebug(`[Scan] Resolved: ${link} → ${resolved || "failed"}`);
                     }
                 } catch (err) {
-                    logError("[Main] Resolver error for:", link, err);
+                    logError("[Scan] Resolver error for:", link, err);
                     if (!cancelScan) {
                         event.sender.send("scan-progress", {
                             original: link,
@@ -227,12 +238,12 @@ ipcMain.on("scan-page", async (event, links) => {
     }
 
     if (!cancelScan) {
+        logInfo("[Scan] All links processed.");
         event.sender.send("scan-complete");
     }
 });
 
-// IPC: cancel scan
-ipcMain.on("scan:cancel", (event) => {
-    logDebug("[Main] Cancelling scan...");
+ipcMain.on("scan:cancel", () => {
+    logInfo("[Scan] Cancelling scan...");
     cancelScan = true;
 });
