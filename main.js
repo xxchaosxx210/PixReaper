@@ -30,7 +30,6 @@ function createWindow() {
     mainWindow.webContents.on("did-finish-load", () => {
         const currentOptions = optionsManager.loadOptions();
         setDebug(!!currentOptions.debugLogging);
-        logDebug("[Main] Sending options to renderer:", currentOptions);
         mainWindow.webContents.send("options:load", currentOptions);
     });
 
@@ -53,9 +52,10 @@ app.whenReady().then(() => {
         event.sender.send("options:saved", saved);
 
         // Avoid reload loop when only saving lastUrl
-        if (!newOptions.lastUrl) {
+        if (!("lastUrl" in newOptions)) {
             mainWindow.webContents.send("options:load", saved);
         }
+
     });
 
     // ✅ IPC: Add bookmark
