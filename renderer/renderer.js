@@ -258,9 +258,11 @@ window.electronAPI.receive("scan-complete", () => {
 // --- Cancel Scan ---
 cancelBtn.addEventListener("click", () => {
     logInfo("[Renderer] Cancelling scan...");
+    statusText.textContent = "Status: Cancelling…";  // ✅ show immediate feedback
     window.electronAPI.send("scan:cancel");
     cancelBtn.disabled = true;
 });
+
 
 // --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
