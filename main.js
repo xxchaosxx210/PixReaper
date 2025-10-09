@@ -243,9 +243,11 @@ ipcMain.on("scan-page", async (event, links) => {
 });
 
 /* --- Cancel Scan --- */
-ipcMain.on("scan:cancel", () => {
+ipcMain.on("scan:cancel", (event) => {
     logInfo("[Scan] Cancelling scan...");
     cancelScan = true;
+
+    // Terminate all active workers
     for (const worker of activeWorkers) {
         try {
             worker.terminate();
@@ -253,6 +255,22 @@ ipcMain.on("scan:cancel", () => {
             logError("[Scan] Error terminating worker:", e);
         }
     }
+
     activeWorkers.clear();
     logInfo("[Scan] Workers terminated.");
+
+    // ✅ Notify the renderer that cancellation is complete
+    if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send("scan:cancelled");
+    }
+});
+
+ipcMain.on("download:cancel", () => {
+    logInfo("[Download] Cancelling downloads...");
+    cancelDownload = true;
+
+    // ✅ Notify renderer for feedback
+    if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send("download:cancelled");
+    }
 });

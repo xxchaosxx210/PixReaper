@@ -1,6 +1,6 @@
 ﻿===========================================
 File: C:\Users\chaos\Documents\dev\PixReaper\main.js
-Lines: 259
+Lines: 277
 
 /* main.js */
 
@@ -247,9 +247,11 @@ ipcMain.on("scan-page", async (event, links) => {
 });
 
 /* --- Cancel Scan --- */
-ipcMain.on("scan:cancel", () => {
+ipcMain.on("scan:cancel", (event) => {
     logInfo("[Scan] Cancelling scan...");
     cancelScan = true;
+
+    // Terminate all active workers
     for (const worker of activeWorkers) {
         try {
             worker.terminate();
@@ -257,8 +259,24 @@ ipcMain.on("scan:cancel", () => {
             logError("[Scan] Error terminating worker:", e);
         }
     }
+
     activeWorkers.clear();
     logInfo("[Scan] Workers terminated.");
+
+    // âœ… Notify the renderer that cancellation is complete
+    if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send("scan:cancelled");
+    }
+});
+
+ipcMain.on("download:cancel", () => {
+    logInfo("[Download] Cancelling downloads...");
+    cancelDownload = true;
+
+    // âœ… Notify renderer for feedback
+    if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send("download:cancelled");
+    }
 });
 
 
@@ -6039,7 +6057,7 @@ Lines: 39
     "radikal.ru",
     "imageupper.com"
   ],
-  "lastUrl": "http://vintage-erotica-forum.com/t19913-p3-jodie-oram-uk.html",
+  "lastUrl": "http://vintage-erotica-forum.com/",
   "bookmarks": [
     {
       "title": "http://vintage-erotica-forum.com/showthread.php?t=57980&highlight=angela+white",
@@ -7029,7 +7047,7 @@ Lines: 118
 
 ===========================================
 File: C:\Users\chaos\Documents\dev\PixReaper\renderer\renderer.js
-Lines: 458
+Lines: 484
 
 // renderer.js
 // Handles UI interactions and IPC for PixReaper
@@ -7277,23 +7295,33 @@ window.electronAPI.receive("scan-progress", (data) => {
 });
 
 window.electronAPI.receive("scan-complete", () => {
+    // âœ… If the user cancelled mid-scan, donâ€™t overwrite the status
+    if (statusText.textContent.includes("Cancelling") || statusText.textContent.includes("cancelled")) {
+        logDebug("[Renderer] Ignoring scan-complete event because scan was cancelled.");
+        return;
+    }
+
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
+
     if (resultsList.children.length > 0) {
         statusText.textContent = "Status: Scan complete. Ready to download.";
         resultsList.querySelectorAll("li.pending").forEach(li => li.className = "ready");
     } else {
         statusText.textContent = "Status: Scan complete â€” no results found.";
     }
+
     logInfo("[Renderer] Scan complete.");
 });
 
 // --- Cancel Scan ---
 cancelBtn.addEventListener("click", () => {
     logInfo("[Renderer] Cancelling scan...");
+    statusText.textContent = "Status: Cancellingâ€¦";  // âœ… show immediate feedback
     window.electronAPI.send("scan:cancel");
     cancelBtn.disabled = true;
 });
+
 
 // --- Options Modal Logic ---
 const optionsModal = document.getElementById("optionsModal");
@@ -7411,6 +7439,15 @@ downloadBtn.addEventListener("click", async () => {
     });
 });
 
+// --- Download Cancelled Feedback ---
+window.electronAPI.receive("download:cancelled", () => {
+    statusText.textContent = "Status: Download cancelled.";
+    cancelBtn.style.display = "none";
+    cancelBtn.disabled = false;
+    logInfo("[Renderer] Download cancelled by user.");
+});
+
+
 // --- Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
     downloadCompleted = currentManifest.filter(e => e.status === "success").length;
@@ -7488,6 +7525,13 @@ window.electronAPI.receive("options:load", (opt) => {
 
 });
 
+// --- Scan Cancelled Feedback ---
+window.electronAPI.receive("scan:cancelled", () => {
+    statusText.textContent = "Status: Scan cancelled.";
+    cancelBtn.style.display = "none";
+    cancelBtn.disabled = false;
+    logInfo("[Renderer] Scan cancelled and workers terminated.");
+});
 
 
 ===========================================
@@ -8082,6 +8126,6 @@ module.exports = {
 
 ===========================================
 Total files: 14
-Total lines: 8012
+Total lines: 8056
 
 

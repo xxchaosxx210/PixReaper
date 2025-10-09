@@ -244,14 +244,22 @@ window.electronAPI.receive("scan-progress", (data) => {
 });
 
 window.electronAPI.receive("scan-complete", () => {
+    // ✅ If the user cancelled mid-scan, don’t overwrite the status
+    if (statusText.textContent.includes("Cancelling") || statusText.textContent.includes("cancelled")) {
+        logDebug("[Renderer] Ignoring scan-complete event because scan was cancelled.");
+        return;
+    }
+
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
+
     if (resultsList.children.length > 0) {
         statusText.textContent = "Status: Scan complete. Ready to download.";
         resultsList.querySelectorAll("li.pending").forEach(li => li.className = "ready");
     } else {
         statusText.textContent = "Status: Scan complete — no results found.";
     }
+
     logInfo("[Renderer] Scan complete.");
 });
 
@@ -380,6 +388,15 @@ downloadBtn.addEventListener("click", async () => {
     });
 });
 
+// --- Download Cancelled Feedback ---
+window.electronAPI.receive("download:cancelled", () => {
+    statusText.textContent = "Status: Download cancelled.";
+    cancelBtn.style.display = "none";
+    cancelBtn.disabled = false;
+    logInfo("[Renderer] Download cancelled by user.");
+});
+
+
 // --- Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
     downloadCompleted = currentManifest.filter(e => e.status === "success").length;
@@ -457,3 +474,10 @@ window.electronAPI.receive("options:load", (opt) => {
 
 });
 
+// --- Scan Cancelled Feedback ---
+window.electronAPI.receive("scan:cancelled", () => {
+    statusText.textContent = "Status: Scan cancelled.";
+    cancelBtn.style.display = "none";
+    cancelBtn.disabled = false;
+    logInfo("[Renderer] Scan cancelled and workers terminated.");
+});
