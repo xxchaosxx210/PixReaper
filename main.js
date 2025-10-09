@@ -2,14 +2,19 @@
 
 const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("path");
-const { resolveLink } = require("./logic/hostResolver");
 const { logDebug, logInfo, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
+const { Worker } = require("worker_threads");
+const os = require("os");
 
+/* -------------------- Globals -------------------- */
 let mainWindow;
 let cancelScan = false;
 let cancelDownload = false;
+let activeWorkers = new Set();
+
+const MAX_WORKERS = Math.min(8, os.cpus().length);
 
 /* -------------------- Window Creation -------------------- */
 function createWindow() {
@@ -21,16 +26,14 @@ function createWindow() {
             preload: path.join(__dirname, "preload.js"),
             contextIsolation: true,
             nodeIntegration: false,
-            webviewTag: true, // ✅ enable <webview>
+            webviewTag: true,
         },
     });
 
     mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
     logInfo("[Main] Browser window created and renderer loaded.");
 
-    // When the renderer has loaded, send current options (including lastUrl)
     mainWindow.webContents.on("did-finish-load", () => {
-        if (!mainWindow?.webContents) return;
         const currentOptions = optionsManager.loadOptions();
         setDebug(!!currentOptions.debugLogging);
         mainWindow.webContents.send("options:load", currentOptions);
@@ -57,12 +60,9 @@ app.whenReady().then(() => {
         const saved = optionsManager.saveOptions(newOptions);
         setDebug(!!saved.debugLogging);
         event.sender.send("options:saved", saved);
-
-        // Avoid reload loop when only saving lastUrl
         if (!("lastUrl" in newOptions)) {
-            if (mainWindow?.webContents) mainWindow.webContents.send("options:load", saved);
+            mainWindow?.webContents?.send("options:load", saved);
         }
-
         logInfo("[IPC] Options saved and reloaded.");
     });
 
@@ -70,19 +70,16 @@ app.whenReady().then(() => {
         try {
             const options = optionsManager.loadOptions();
             options.bookmarks = options.bookmarks || [];
-
             const exists = options.bookmarks.some(
                 (b) => b.url.toLowerCase() === bookmark.url.toLowerCase()
             );
-
             if (!exists && bookmark.url) {
                 options.bookmarks.push({
                     title: bookmark.title || bookmark.url,
                     url: bookmark.url,
                 });
-
                 const saved = optionsManager.saveOptions(options);
-                if (mainWindow?.webContents) mainWindow.webContents.send("options:load", saved);
+                mainWindow?.webContents?.send("options:load", saved);
                 event.sender.send("options:saved", saved);
                 logInfo(`[IPC] Bookmark added: ${bookmark.url}`);
             } else {
@@ -95,19 +92,16 @@ app.whenReady().then(() => {
 
     ipcMain.on("options:removeBookmark", (event, urlToRemove) => {
         if (!urlToRemove) return;
-
         try {
             const options = optionsManager.loadOptions();
             options.bookmarks = options.bookmarks || [];
-
             const beforeCount = options.bookmarks.length;
             options.bookmarks = options.bookmarks.filter(
                 (b) => b.url.toLowerCase() !== urlToRemove.toLowerCase()
             );
-
             if (options.bookmarks.length < beforeCount) {
                 const saved = optionsManager.saveOptions(options);
-                if (mainWindow?.webContents) mainWindow.webContents.send("options:load", saved);
+                mainWindow?.webContents?.send("options:load", saved);
                 event.sender.send("options:saved", saved);
                 logInfo(`[IPC] Bookmark removed: ${urlToRemove}`);
             } else {
@@ -122,7 +116,7 @@ app.whenReady().then(() => {
         const defaults = optionsManager.getDefaultOptions();
         const saved = optionsManager.saveOptions(defaults);
         setDebug(!!saved.debugLogging);
-        if (mainWindow?.webContents) mainWindow.webContents.send("options:load", saved);
+        mainWindow?.webContents?.send("options:load", saved);
         event.sender.send("options:saved", saved);
         logInfo("[IPC] Options reset to defaults.");
     });
@@ -131,7 +125,6 @@ app.whenReady().then(() => {
     ipcMain.on("download:start", async (event, { manifest, options }) => {
         logInfo(`[Download] Starting download of ${manifest.length} files.`);
         cancelDownload = false;
-
         try {
             await downloader.startDownload(
                 manifest,
@@ -146,7 +139,6 @@ app.whenReady().then(() => {
                 },
                 () => cancelDownload
             );
-
             if (!cancelDownload) {
                 logInfo("[Download] All downloads completed successfully.");
                 event.sender.send("download:complete");
@@ -167,7 +159,6 @@ app.whenReady().then(() => {
         const result = await dialog.showOpenDialog(mainWindow, {
             properties: ["openDirectory", "createDirectory"],
         });
-
         if (!result.canceled && result.filePaths.length > 0) {
             logDebug("[Dialog] Folder selected:", result.filePaths[0]);
             event.sender.send("choose-folder:result", result.filePaths[0]);
@@ -177,7 +168,7 @@ app.whenReady().then(() => {
         }
     });
 
-    /* ---------- IPC: Logging bridge from renderer ---------- */
+    /* ---------- IPC: Logging bridge ---------- */
     ipcMain.on("log:debug", (_event, args) => logDebug(...args));
     ipcMain.on("log:info", (_event, args) => logInfo(...args));
     ipcMain.on("log:error", (_event, args) => logError(...args));
@@ -194,56 +185,74 @@ app.on("activate", () => {
     if (mainWindow === null) createWindow();
 });
 
-/* -------------------- IPC: Scan Page -------------------- */
-const CONCURRENCY = 8;
-
+/* -------------------- Scan Page (Persistent Worker Pool) -------------------- */
 ipcMain.on("scan-page", async (event, links) => {
-    logInfo(`[Scan] Received ${links.length} links for resolution.`);
+    logInfo(`[Scan] Starting scan for ${links.length} links using ${MAX_WORKERS} workers`);
     cancelScan = false;
+    activeWorkers.clear();
 
-    for (let i = 0; i < links.length; i += CONCURRENCY) {
-        if (cancelScan) {
-            logInfo("[Scan] Scan cancelled by user.");
-            event.sender.send("scan-complete");
-            return;
+    const queue = [...links];
+    const results = [];
+
+    const assignNext = (worker) => {
+        if (cancelScan) return;
+        const nextLink = queue.shift();
+        if (nextLink) {
+            logDebug(`[Scan] Assigning link → ${nextLink} (Active: ${activeWorkers.size}, Remaining: ${queue.length})`);
+            worker.postMessage(nextLink);
+        } else {
+            worker.terminate();
+            activeWorkers.delete(worker);
+            if (activeWorkers.size === 0 && !cancelScan) {
+                if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
+                logInfo(`[Scan] Completed all ${results.length} links.`);
+            }
         }
+    };
 
-        const batch = links.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < MAX_WORKERS && queue.length > 0; i++) {
+        const worker = new Worker(path.join(__dirname, "logic", "linkWorker.js"));
+        activeWorkers.add(worker);
+        worker.unref();
 
-        await Promise.all(
-            batch.map(async (link) => {
-                if (cancelScan) return;
-                try {
-                    const resolved = await resolveLink(link);
-                    if (!cancelScan) {
-                        event.sender.send("scan-progress", {
-                            original: link,
-                            resolved,
-                            status: resolved ? "success" : "failed",
-                        });
-                        logDebug(`[Scan] Resolved: ${link} → ${resolved || "failed"}`);
-                    }
-                } catch (err) {
-                    logError("[Scan] Resolver error for:", link, err);
-                    if (!cancelScan) {
-                        event.sender.send("scan-progress", {
-                            original: link,
-                            resolved: null,
-                            status: "failed",
-                        });
-                    }
-                }
-            })
-        );
-    }
+        worker.on("message", (data) => {
+            if (!cancelScan && data) {
+                results.push(data);
+                if (!event.sender.isDestroyed()) event.sender.send("scan-progress", data);
+                logDebug(`[Scan] ${data.status.toUpperCase()} → ${data.link} (${data.duration ?? "?"}ms)`);
+            }
+            assignNext(worker);
+        });
 
-    if (!cancelScan) {
-        logInfo("[Scan] All links processed.");
-        event.sender.send("scan-complete");
+        worker.on("error", (err) => {
+            logError("[Scan] Worker error:", err);
+            assignNext(worker);
+        });
+
+        worker.on("exit", (code) => {
+            activeWorkers.delete(worker);
+            logDebug(`[Scan] Worker exited (${code}). Active: ${activeWorkers.size}`);
+            if (queue.length === 0 && activeWorkers.size === 0 && !cancelScan) {
+                if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
+                logInfo("[Scan] All workers finished after exit.");
+            }
+        });
+
+        assignNext(worker);
     }
 });
 
+/* --- Cancel Scan --- */
 ipcMain.on("scan:cancel", () => {
     logInfo("[Scan] Cancelling scan...");
     cancelScan = true;
+    for (const worker of activeWorkers) {
+        try {
+            worker.terminate();
+        } catch (e) {
+            logError("[Scan] Error terminating worker:", e);
+        }
+    }
+    activeWorkers.clear();
+    logInfo("[Scan] Workers terminated.");
 });

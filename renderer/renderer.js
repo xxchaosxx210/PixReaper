@@ -453,6 +453,5 @@ window.electronAPI.receive("options:load", (opt) => {
         navigateTo("about:blank");
     }
 
-    logDebug("[Renderer] Options loaded:", opt);
 });
 
