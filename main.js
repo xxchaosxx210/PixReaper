@@ -17,57 +17,6 @@ let currentScan = null;
 const cpuCount = os.cpus()?.length || 1;
 const MAX_WORKERS = Math.min(8, Math.max(1, cpuCount));
 
-function resolveScanSender(scanState) {
-    if (!scanState) return null;
-    const sender = scanState.event?.sender;
-    if (sender && !sender.isDestroyed()) {
-        return sender;
-    }
-    const fallback = mainWindow?.webContents;
-    if (fallback && !fallback.isDestroyed()) {
-        return fallback;
-    }
-    return null;
-}
-
-function cancelScan(scanState, { reason = "Scan cancelled.", notifyRenderer = true } = {}) {
-    if (!scanState || scanState.cancelled || scanState.hasFinished) {
-        return false;
-    }
-
-    const resultCount = Array.isArray(scanState.results) ? scanState.results.length : 0;
-    scanState.cancelled = true;
-    scanState.hasFinished = true;
-
-    if (Array.isArray(scanState.queue)) {
-        scanState.queue.length = 0;
-    }
-    scanState.inFlight = 0;
-
-    for (const worker of scanState.workers) {
-        worker
-            .terminate()
-            .catch((err) => logError("[Scan] Error terminating worker:", err));
-    }
-    scanState.workers.clear();
-
-    const sender = notifyRenderer ? resolveScanSender(scanState) : null;
-    if (sender) {
-        sender.send("scan:cancelled");
-    }
-
-    if (currentScan === scanState) {
-        currentScan = null;
-    }
-
-    scanState.results = [];
-    scanState.queue = [];
-    scanState.event = null;
-
-    logInfo(`[Scan] ${reason} Processed ${resultCount} links before cancellation.`);
-    return true;
-}
-
 /* -------------------- Window Creation -------------------- */
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -261,20 +210,26 @@ ipcMain.on("scan-page", async (event, links) => {
     const previousScan = currentScan;
     if (previousScan && !previousScan.hasFinished && !previousScan.cancelled) {
         logDebug("[Scan] Aborting previous scan before starting a new one.");
-        cancelScan(previousScan, {
-            reason: "Cancelled previous scan before starting a new one.",
-            notifyRenderer: false,
-        });
+        for (const worker of previousScan.workers) {
+            worker
+                .terminate()
+                .catch((err) => logError("[Scan] Error terminating stale worker:", err));
+        }
+        previousScan.workers.clear();
+        previousScan.cancelled = true;
+        if (Array.isArray(previousScan.queue)) previousScan.queue.length = 0;
+        previousScan.inFlight = 0;
+        if (previousScan.event?.sender && !previousScan.event.sender.isDestroyed()) {
+            previousScan.event.sender.send("scan:cancelled");
+        }
     }
 
-    const linkQueue = Array.isArray(links) ? [...links] : [];
-    logInfo(
-        `[Scan] Starting scan for ${linkQueue.length} links using ${MAX_WORKERS} workers`
-    );
+    const queue = Array.isArray(links) ? [...links] : [];
+    logInfo(`[Scan] Starting scan for ${queue.length} links using ${MAX_WORKERS} workers`);
 
     const scanState = {
         event,
-        queue: linkQueue,
+        queue,
         results: [],
         inFlight: 0,
         workers: new Set(),
@@ -283,59 +238,59 @@ ipcMain.on("scan-page", async (event, links) => {
     };
     currentScan = scanState;
 
-    const completeScan = () => {
-        if (scanState.hasFinished || scanState.cancelled) return;
-        scanState.hasFinished = true;
+    const safeSender = () => {
+        const sender = scanState.event?.sender;
+        return sender && !sender.isDestroyed() ? sender : null;
+    };
 
-        for (const worker of scanState.workers) {
+    const queue = [...links];
+    const results = [];
+    let inFlight = 0;
+    let hasFinished = false;
+
+    const finishScan = () => {
+        if (hasFinished || cancelScan) return;
+        hasFinished = true;
+
+        for (const worker of activeWorkers) {
             worker
                 .terminate()
                 .catch((err) => logError("[Scan] Error terminating worker after completion:", err));
         }
-        scanState.workers.clear();
+        activeWorkers.clear();
 
-        const sender = resolveScanSender(scanState);
-        if (sender) sender.send("scan-complete", scanState.results);
-        if (currentScan === scanState) currentScan = null;
-        scanState.event = null;
-        scanState.queue = [];
-        logInfo(`[Scan] Completed all ${scanState.results.length} links.`);
-    };
-
-    const decrementInFlight = () => {
-        if (scanState.inFlight > 0) scanState.inFlight -= 1;
+        if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
+        logInfo(`[Scan] Completed all ${results.length} links.`);
     };
 
     const assignNext = (worker) => {
-        if (scanState.cancelled || scanState.hasFinished) return;
-        const nextLink = scanState.queue.shift();
+        if (cancelScan || hasFinished) return;
+        const nextLink = queue.shift();
         if (nextLink) {
-            scanState.inFlight += 1;
-            logDebug(
-                `[Scan] Assigning link → ${nextLink} (Active: ${scanState.workers.size}, Remaining: ${scanState.queue.length}, InFlight: ${scanState.inFlight})`
-            );
+            inFlight += 1;
+            logDebug(`[Scan] Assigning link → ${nextLink} (Active: ${activeWorkers.size}, Remaining: ${queue.length}, InFlight: ${inFlight})`);
             worker.postMessage(nextLink);
-        } else if (scanState.inFlight === 0) {
-            completeScan();
+        } else if (inFlight === 0) {
+            finishScan();
         }
     };
 
-    if (scanState.queue.length === 0) {
-        completeScan();
+    if (queue.length === 0) {
+        finishScan();
         return;
     }
 
-    const spawnWorker = () => {
+    for (let i = 0; i < MAX_WORKERS && queue.length > 0; i++) {
         const worker = new Worker(path.join(__dirname, "logic", "linkWorker.js"));
         scanState.workers.add(worker);
         worker.unref();
 
         worker.on("message", (data) => {
-            decrementInFlight();
-            if (scanState.cancelled || scanState.hasFinished) return;
+            if (inFlight > 0) inFlight -= 1;
+            if (cancelScan || hasFinished) return;
             if (data) {
                 scanState.results.push(data);
-                const sender = resolveScanSender(scanState);
+                const sender = safeSender();
                 if (sender) sender.send("scan-progress", data);
                 logDebug(`[Scan] ${data.status.toUpperCase()} → ${data.link} (${data.duration ?? "?"}ms)`);
             }
@@ -343,23 +298,17 @@ ipcMain.on("scan-page", async (event, links) => {
         });
 
         worker.on("error", (err) => {
-            decrementInFlight();
-            if (scanState.cancelled || scanState.hasFinished) return;
+            if (inFlight > 0) inFlight -= 1;
             logError("[Scan] Worker error:", err);
             assignNext(worker);
         });
 
         worker.on("exit", (code) => {
-            scanState.workers.delete(worker);
-            logDebug(`[Scan] Worker exited (${code}). Active: ${scanState.workers.size}`);
-            if (scanState.cancelled || scanState.hasFinished) {
-                if (scanState.workers.size === 0 && currentScan === scanState) {
-                    currentScan = null;
-                }
-                return;
-            }
-            if (scanState.queue.length === 0 && scanState.inFlight === 0 && scanState.workers.size === 0) {
-                completeScan();
+            activeWorkers.delete(worker);
+            logDebug(`[Scan] Worker exited (${code}). Active: ${activeWorkers.size}`);
+            if (inFlight > 0) inFlight -= 1;
+            if (queue.length === 0 && activeWorkers.size === 0 && !cancelScan) {
+                finishScan();
             }
         });
 
@@ -375,7 +324,31 @@ ipcMain.on("scan-page", async (event, links) => {
 
 /* --- Cancel Scan --- */
 ipcMain.on("scan:cancel", () => {
-    if (!cancelScan(currentScan, { reason: "Scan cancelled by user.", notifyRenderer: true })) {
+    logInfo("[Scan] Cancelling scan...");
+
+    const scanState = currentScan;
+    if (!scanState) {
         logDebug("[Scan] No active scan to cancel.");
+        return;
     }
+
+    scanState.cancelled = true;
+    for (const worker of scanState.workers) {
+        worker
+            .terminate()
+            .catch((err) => logError("[Scan] Error terminating worker:", err));
+    }
+    scanState.workers.clear();
+    scanState.queue.length = 0;
+    scanState.inFlight = 0;
+    if (currentScan === scanState) currentScan = null;
+
+    const sender = scanState.event?.sender && !scanState.event.sender.isDestroyed()
+        ? scanState.event.sender
+        : mainWindow?.webContents && !mainWindow.webContents.isDestroyed()
+            ? mainWindow.webContents
+            : null;
+    if (sender) sender.send("scan:cancelled");
+
+    logInfo("[Scan] Workers terminated.");
 });
