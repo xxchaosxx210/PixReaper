@@ -267,12 +267,14 @@ ipcMain.on("scan-page", async (event, links) => {
         });
     }
 
-    const queue = Array.isArray(links) ? [...links] : [];
-    logInfo(`[Scan] Starting scan for ${queue.length} links using ${MAX_WORKERS} workers`);
+    const linkQueue = Array.isArray(links) ? [...links] : [];
+    logInfo(
+        `[Scan] Starting scan for ${linkQueue.length} links using ${MAX_WORKERS} workers`
+    );
 
     const scanState = {
         event,
-        queue,
+        queue: linkQueue,
         results: [],
         inFlight: 0,
         workers: new Set(),
