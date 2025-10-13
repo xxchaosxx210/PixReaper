@@ -48,6 +48,18 @@ function createWindow() {
         logInfo("[Main] Main window closed.");
         mainWindow = null;
     });
+
+    // Preload heavy modules once to avoid first-scan delay
+    setTimeout(() => {
+        logDebug("[Warmup] Preloading resolver modules...");
+        try {
+            const { resolveLink } = require("./logic/hostResolver");
+            resolveLink("https://example.com").catch(() => { });
+        } catch (e) {
+            logError("[Warmup] Failed to preload:", e);
+        }
+    }, 2000);
+
 }
 
 /* -------------------- App Ready -------------------- */
@@ -151,6 +163,9 @@ app.whenReady().then(() => {
     ipcMain.on("download:cancel", () => {
         logInfo("[Download] Cancelling downloads...");
         cancelDownload = true;
+        if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
+            mainWindow.webContents.send("download:cancelled");
+        }
     });
 
     /* ---------- IPC: Folder Picker ---------- */
@@ -200,13 +215,9 @@ ipcMain.on("scan-page", async (event, links) => {
         if (nextLink) {
             logDebug(`[Scan] Assigning link → ${nextLink} (Active: ${activeWorkers.size}, Remaining: ${queue.length})`);
             worker.postMessage(nextLink);
-        } else {
-            worker.terminate();
-            activeWorkers.delete(worker);
-            if (activeWorkers.size === 0 && !cancelScan) {
-                if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
-                logInfo(`[Scan] Completed all ${results.length} links.`);
-            }
+        } else if (activeWorkers.size === 0 && !cancelScan) {
+            if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
+            logInfo(`[Scan] Completed all ${results.length} links.`);
         }
     };
 
@@ -216,7 +227,8 @@ ipcMain.on("scan-page", async (event, links) => {
         worker.unref();
 
         worker.on("message", (data) => {
-            if (!cancelScan && data) {
+            if (cancelScan) return;
+            if (data) {
                 results.push(data);
                 if (!event.sender.isDestroyed()) event.sender.send("scan-progress", data);
                 logDebug(`[Scan] ${data.status.toUpperCase()} → ${data.link} (${data.duration ?? "?"}ms)`);
@@ -243,11 +255,10 @@ ipcMain.on("scan-page", async (event, links) => {
 });
 
 /* --- Cancel Scan --- */
-ipcMain.on("scan:cancel", (event) => {
+ipcMain.on("scan:cancel", () => {
     logInfo("[Scan] Cancelling scan...");
     cancelScan = true;
 
-    // Terminate all active workers
     for (const worker of activeWorkers) {
         try {
             worker.terminate();
@@ -259,18 +270,7 @@ ipcMain.on("scan:cancel", (event) => {
     activeWorkers.clear();
     logInfo("[Scan] Workers terminated.");
 
-    // ✅ Notify the renderer that cancellation is complete
     if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
         mainWindow.webContents.send("scan:cancelled");
-    }
-});
-
-ipcMain.on("download:cancel", () => {
-    logInfo("[Download] Cancelling downloads...");
-    cancelDownload = true;
-
-    // ✅ Notify renderer for feedback
-    if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
-        mainWindow.webContents.send("download:cancelled");
     }
 });

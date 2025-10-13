@@ -243,10 +243,11 @@ window.electronAPI.receive("scan-progress", (data) => {
     if (resultsList.children.length === 1) downloadBtn.style.display = "inline-block";
 });
 
+// --- Scan Complete ---
 window.electronAPI.receive("scan-complete", () => {
-    // ✅ If the user cancelled mid-scan, don’t overwrite the status
+    // If the user cancelled mid-scan, ignore this
     if (statusText.textContent.includes("Cancelling") || statusText.textContent.includes("cancelled")) {
-        logDebug("[Renderer] Ignoring scan-complete event because scan was cancelled.");
+        logDebug("[Renderer] Ignoring scan-complete event (scan was cancelled).");
         return;
     }
 
@@ -263,13 +264,14 @@ window.electronAPI.receive("scan-complete", () => {
     logInfo("[Renderer] Scan complete.");
 });
 
-// --- Cancel Scan ---
-cancelBtn.addEventListener("click", () => {
-    logInfo("[Renderer] Cancelling scan...");
-    statusText.textContent = "Status: Cancelling…";  // ✅ show immediate feedback
-    window.electronAPI.send("scan:cancel");
-    cancelBtn.disabled = true;
+// --- Scan Cancelled Feedback ---
+window.electronAPI.receive("scan:cancelled", () => {
+    statusText.textContent = "Status: Scan cancelled.";
+    cancelBtn.style.display = "none";
+    cancelBtn.disabled = false;
+    logInfo("[Renderer] Scan cancelled and workers terminated.");
 });
+
 
 
 // --- Options Modal Logic ---
