@@ -7,6 +7,70 @@ const tough = require("tough-cookie");
 const { logDebug, logWarn, logError } = require("../utils/logger");
 const { loadOptions } = require("../config/optionsManager");
 
+const DEFAULT_EXTENSIONS = ["jpg", "jpeg"];
+
+let cachedOptions = {};
+let cachedValidHosts = [];
+let cachedExtRegex = null;
+
+function sanitizeExtensions(exts) {
+    if (!Array.isArray(exts) || exts.length === 0) {
+        return [...DEFAULT_EXTENSIONS];
+    }
+    return Array.from(new Set(
+        exts
+            .map((ext) => String(ext).toLowerCase().trim().replace(/^\./, ""))
+            .filter(Boolean)
+    ));
+}
+
+function sanitizeHosts(hosts) {
+    if (!Array.isArray(hosts) || hosts.length === 0) return [];
+    return Array.from(new Set(
+        hosts
+            .map((host) => String(host).toLowerCase().trim().replace(/^www\./, ""))
+            .filter(Boolean)
+    ));
+}
+
+function buildRegex(exts) {
+    const normalized = sanitizeExtensions(exts);
+    return new RegExp(`\\.(${normalized.join("|")})(?:$|\\?)`, "i");
+}
+
+function applyOptions(options) {
+    const nextOptions = options
+        ? { ...cachedOptions, ...options }
+        : loadOptions();
+
+    const validHosts = sanitizeHosts(nextOptions?.validHosts);
+    const validExtensions = sanitizeExtensions(nextOptions?.validExtensions);
+
+    cachedOptions = {
+        ...nextOptions,
+        validHosts,
+        validExtensions,
+    };
+    cachedValidHosts = validHosts;
+    cachedExtRegex = buildRegex(validExtensions);
+}
+
+function getExtRegex() {
+    if (!cachedExtRegex) applyOptions();
+    return cachedExtRegex;
+}
+
+function getValidHosts() {
+    if (!cachedOptions) applyOptions();
+    return cachedValidHosts;
+}
+
+function refreshResolverOptions(updatedOptions) {
+    applyOptions(updatedOptions);
+}
+
+applyOptions(loadOptions());
+
 /* ---------- Shared Cookie Jar ---------- */
 const jar = new tough.CookieJar();
 const fetchWithCookies = fetchCookie(fetch, jar);
@@ -32,13 +96,6 @@ async function safeFetch(url, options = {}, timeoutMs = 7000) {
     } finally {
         clearTimeout(id);
     }
-}
-
-/* ---------- Utility: Valid Extension Regex ---------- */
-function getExtRegex() {
-    const options = loadOptions();
-    const valid = options.validExtensions?.length ? options.validExtensions : ["jpg", "jpeg"];
-    return new RegExp(`\\.(${valid.join("|")})(?:$|\\?)`, "i");
 }
 
 /* ---------- Generic Fallback Resolver ---------- */
@@ -210,8 +267,7 @@ const hostResolvers = {
 async function resolveLink(url) {
     try {
         const hostname = new URL(url).hostname.replace(/^www\./, "");
-        const options = loadOptions();
-        const validHosts = options.validHosts || [];
+        const validHosts = getValidHosts();
 
         const resolverKey = Object.keys(hostResolvers).find((host) =>
             hostname.endsWith(host)
@@ -238,8 +294,7 @@ async function resolveLink(url) {
 function isSupportedHost(url) {
     try {
         const hostname = new URL(url).hostname.replace(/^www\./, "");
-        const options = loadOptions();
-        const validHosts = options.validHosts || [];
+        const validHosts = getValidHosts();
         return (
             Object.keys(hostResolvers).some((host) => hostname.endsWith(host)) ||
             validHosts.some((h) => hostname.endsWith(h))
@@ -249,4 +304,4 @@ function isSupportedHost(url) {
     }
 }
 
-module.exports = { resolveLink, isSupportedHost };
+module.exports = { resolveLink, isSupportedHost, refreshResolverOptions };

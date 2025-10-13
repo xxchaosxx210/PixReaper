@@ -5,6 +5,7 @@ const path = require("path");
 const { logDebug, logInfo, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
+const hostResolver = require("./logic/hostResolver");
 const { Worker } = require("worker_threads");
 const os = require("os");
 
@@ -36,6 +37,7 @@ function createWindow() {
     mainWindow.webContents.on("did-finish-load", () => {
         const currentOptions = optionsManager.loadOptions();
         setDebug(!!currentOptions.debugLogging);
+        hostResolver.refreshResolverOptions(currentOptions);
         mainWindow.webContents.send("options:load", currentOptions);
         logInfo("[Main] Renderer finished loading. Options sent to renderer.");
     });
@@ -53,8 +55,7 @@ function createWindow() {
     setTimeout(() => {
         logDebug("[Warmup] Preloading resolver modules...");
         try {
-            const { resolveLink } = require("./logic/hostResolver");
-            resolveLink("https://example.com").catch(() => { });
+            hostResolver.resolveLink("https://example.com").catch(() => { });
         } catch (e) {
             logError("[Warmup] Failed to preload:", e);
         }
@@ -71,6 +72,7 @@ app.whenReady().then(() => {
     ipcMain.on("options:save", (event, newOptions) => {
         const saved = optionsManager.saveOptions(newOptions);
         setDebug(!!saved.debugLogging);
+        hostResolver.refreshResolverOptions(saved);
         event.sender.send("options:saved", saved);
         if (!("lastUrl" in newOptions)) {
             mainWindow?.webContents?.send("options:load", saved);
@@ -91,6 +93,7 @@ app.whenReady().then(() => {
                     url: bookmark.url,
                 });
                 const saved = optionsManager.saveOptions(options);
+                hostResolver.refreshResolverOptions(saved);
                 mainWindow?.webContents?.send("options:load", saved);
                 event.sender.send("options:saved", saved);
                 logInfo(`[IPC] Bookmark added: ${bookmark.url}`);
@@ -113,6 +116,7 @@ app.whenReady().then(() => {
             );
             if (options.bookmarks.length < beforeCount) {
                 const saved = optionsManager.saveOptions(options);
+                hostResolver.refreshResolverOptions(saved);
                 mainWindow?.webContents?.send("options:load", saved);
                 event.sender.send("options:saved", saved);
                 logInfo(`[IPC] Bookmark removed: ${urlToRemove}`);
@@ -128,6 +132,7 @@ app.whenReady().then(() => {
         const defaults = optionsManager.getDefaultOptions();
         const saved = optionsManager.saveOptions(defaults);
         setDebug(!!saved.debugLogging);
+        hostResolver.refreshResolverOptions(saved);
         mainWindow?.webContents?.send("options:load", saved);
         event.sender.send("options:saved", saved);
         logInfo("[IPC] Options reset to defaults.");
