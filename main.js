@@ -213,18 +213,40 @@ ipcMain.on("scan-page", async (event, links) => {
 
     const queue = [...links];
     const results = [];
+    let inFlight = 0;
+    let hasFinished = false;
+
+    const finishScan = () => {
+        if (hasFinished || cancelScan) return;
+        hasFinished = true;
+
+        for (const worker of activeWorkers) {
+            worker
+                .terminate()
+                .catch((err) => logError("[Scan] Error terminating worker after completion:", err));
+        }
+        activeWorkers.clear();
+
+        if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
+        logInfo(`[Scan] Completed all ${results.length} links.`);
+    };
 
     const assignNext = (worker) => {
-        if (cancelScan) return;
+        if (cancelScan || hasFinished) return;
         const nextLink = queue.shift();
         if (nextLink) {
-            logDebug(`[Scan] Assigning link → ${nextLink} (Active: ${activeWorkers.size}, Remaining: ${queue.length})`);
+            inFlight += 1;
+            logDebug(`[Scan] Assigning link → ${nextLink} (Active: ${activeWorkers.size}, Remaining: ${queue.length}, InFlight: ${inFlight})`);
             worker.postMessage(nextLink);
-        } else if (activeWorkers.size === 0 && !cancelScan) {
-            if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
-            logInfo(`[Scan] Completed all ${results.length} links.`);
+        } else if (inFlight === 0) {
+            finishScan();
         }
     };
+
+    if (queue.length === 0) {
+        finishScan();
+        return;
+    }
 
     for (let i = 0; i < MAX_WORKERS && queue.length > 0; i++) {
         const worker = new Worker(path.join(__dirname, "logic", "linkWorker.js"));
@@ -232,7 +254,8 @@ ipcMain.on("scan-page", async (event, links) => {
         worker.unref();
 
         worker.on("message", (data) => {
-            if (cancelScan) return;
+            if (inFlight > 0) inFlight -= 1;
+            if (cancelScan || hasFinished) return;
             if (data) {
                 results.push(data);
                 if (!event.sender.isDestroyed()) event.sender.send("scan-progress", data);
@@ -242,6 +265,7 @@ ipcMain.on("scan-page", async (event, links) => {
         });
 
         worker.on("error", (err) => {
+            if (inFlight > 0) inFlight -= 1;
             logError("[Scan] Worker error:", err);
             assignNext(worker);
         });
@@ -249,9 +273,9 @@ ipcMain.on("scan-page", async (event, links) => {
         worker.on("exit", (code) => {
             activeWorkers.delete(worker);
             logDebug(`[Scan] Worker exited (${code}). Active: ${activeWorkers.size}`);
+            if (inFlight > 0) inFlight -= 1;
             if (queue.length === 0 && activeWorkers.size === 0 && !cancelScan) {
-                if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
-                logInfo("[Scan] All workers finished after exit.");
+                finishScan();
             }
         });
 
