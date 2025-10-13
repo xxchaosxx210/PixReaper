@@ -243,54 +243,51 @@ ipcMain.on("scan-page", async (event, links) => {
         return sender && !sender.isDestroyed() ? sender : null;
     };
 
-    const completeScan = () => {
-        if (scanState.hasFinished || scanState.cancelled) return;
-        scanState.hasFinished = true;
+    const queue = [...links];
+    const results = [];
+    let inFlight = 0;
+    let hasFinished = false;
 
-        for (const worker of scanState.workers) {
+    const finishScan = () => {
+        if (hasFinished || cancelScan) return;
+        hasFinished = true;
+
+        for (const worker of activeWorkers) {
             worker
                 .terminate()
                 .catch((err) => logError("[Scan] Error terminating worker after completion:", err));
         }
-        scanState.workers.clear();
+        activeWorkers.clear();
 
-        const sender = safeSender();
-        if (sender) sender.send("scan-complete", scanState.results);
-        if (currentScan === scanState) currentScan = null;
-        logInfo(`[Scan] Completed all ${scanState.results.length} links.`);
-    };
-
-    const decrementInFlight = () => {
-        if (scanState.inFlight > 0) scanState.inFlight -= 1;
+        if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
+        logInfo(`[Scan] Completed all ${results.length} links.`);
     };
 
     const assignNext = (worker) => {
-        if (scanState.cancelled || scanState.hasFinished) return;
-        const nextLink = scanState.queue.shift();
+        if (cancelScan || hasFinished) return;
+        const nextLink = queue.shift();
         if (nextLink) {
-            scanState.inFlight += 1;
-            logDebug(
-                `[Scan] Assigning link → ${nextLink} (Active: ${scanState.workers.size}, Remaining: ${scanState.queue.length}, InFlight: ${scanState.inFlight})`
-            );
+            inFlight += 1;
+            logDebug(`[Scan] Assigning link → ${nextLink} (Active: ${activeWorkers.size}, Remaining: ${queue.length}, InFlight: ${inFlight})`);
             worker.postMessage(nextLink);
-        } else if (scanState.inFlight === 0) {
-            completeScan();
+        } else if (inFlight === 0) {
+            finishScan();
         }
     };
 
-    if (scanState.queue.length === 0) {
-        completeScan();
+    if (queue.length === 0) {
+        finishScan();
         return;
     }
 
-    const spawnWorker = () => {
+    for (let i = 0; i < MAX_WORKERS && queue.length > 0; i++) {
         const worker = new Worker(path.join(__dirname, "logic", "linkWorker.js"));
         scanState.workers.add(worker);
         worker.unref();
 
         worker.on("message", (data) => {
-            decrementInFlight();
-            if (scanState.cancelled || scanState.hasFinished) return;
+            if (inFlight > 0) inFlight -= 1;
+            if (cancelScan || hasFinished) return;
             if (data) {
                 scanState.results.push(data);
                 const sender = safeSender();
@@ -301,23 +298,17 @@ ipcMain.on("scan-page", async (event, links) => {
         });
 
         worker.on("error", (err) => {
-            decrementInFlight();
-            if (scanState.cancelled || scanState.hasFinished) return;
+            if (inFlight > 0) inFlight -= 1;
             logError("[Scan] Worker error:", err);
             assignNext(worker);
         });
 
         worker.on("exit", (code) => {
-            scanState.workers.delete(worker);
-            logDebug(`[Scan] Worker exited (${code}). Active: ${scanState.workers.size}`);
-            if (scanState.cancelled || scanState.hasFinished) {
-                if (scanState.workers.size === 0 && currentScan === scanState) {
-                    currentScan = null;
-                }
-                return;
-            }
-            if (scanState.queue.length === 0 && scanState.inFlight === 0 && scanState.workers.size === 0) {
-                completeScan();
+            activeWorkers.delete(worker);
+            logDebug(`[Scan] Worker exited (${code}). Active: ${activeWorkers.size}`);
+            if (inFlight > 0) inFlight -= 1;
+            if (queue.length === 0 && activeWorkers.size === 0 && !cancelScan) {
+                finishScan();
             }
         });
 
