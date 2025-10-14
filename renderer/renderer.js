@@ -222,6 +222,9 @@ openFolderBtn.addEventListener("click", () => {
     window.electronAPI.send("download:open-folder", lastDownloadFolder);
 });
 
+let scanInProgress = false;
+let downloadInProgress = false;
+
 // --- Scan ---
 scanButton.addEventListener("click", async () => {
     resultsList.innerHTML = "";
@@ -229,8 +232,6 @@ scanButton.addEventListener("click", async () => {
     downloadBtn.style.display = "none";
     cancelBtn.style.display = "inline-block";
     cancelBtn.disabled = false;
-    hideOpenFolderButton();
-    lastDownloadFolder = null;
     imagesFound = 0;
     imagesFoundText.textContent = "Images found: 0";
     statusText.textContent = "Status: Scanning...";
@@ -305,7 +306,6 @@ window.electronAPI.receive("scan-complete", () => {
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
     scanInProgress = false;
-    hideOpenFolderButton();
 
     if (resultsList.children.length > 0) {
         statusText.textContent = "Status: Scan complete. Ready to download.";
@@ -323,7 +323,6 @@ window.electronAPI.receive("scan:cancelled", () => {
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
     scanInProgress = false;
-    hideOpenFolderButton();
     logInfo("[Renderer] Scan cancelled and workers terminated.");
 });
 
@@ -398,8 +397,6 @@ downloadBtn.addEventListener("click", async () => {
     cancelBtn.style.display = "inline-block";
     cancelBtn.disabled = false;
     scanInProgress = false;
-    hideOpenFolderButton();
-    lastDownloadFolder = null;
     logInfo("[Renderer] Preparing download manifest...");
 
     const options = {
@@ -443,12 +440,10 @@ downloadBtn.addEventListener("click", async () => {
     if (downloadTotal > 0) {
         statusText.textContent = `Status: Downloading (0/${downloadTotal}) — 0%`;
         downloadInProgress = true;
-        lastDownloadFolder = folder;
     } else {
         statusText.textContent = "Status: No downloads queued.";
         cancelBtn.style.display = "none";
         downloadInProgress = false;
-        lastDownloadFolder = null;
     }
 
     logInfo(`[Renderer] Sending ${downloadTotal} downloads to main process.`);
@@ -464,7 +459,6 @@ window.electronAPI.receive("download:cancelled", () => {
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
     downloadInProgress = false;
-    showOpenFolderButton();
     logInfo("[Renderer] Download cancelled by user.");
 });
 
@@ -509,7 +503,6 @@ window.electronAPI.receive("download:complete", () => {
     statusText.textContent = "Status: All downloads complete.";
     progressBar.style.width = "100%";
     downloadInProgress = false;
-    showOpenFolderButton();
     logInfo("[Renderer] All downloads complete.");
 });
 
