@@ -199,6 +199,28 @@ const imagesFoundText = document.getElementById("imageCount");
 const progressBar = document.getElementById("progressBar");
 const downloadBtn = document.getElementById("downloadBtn");
 const cancelBtn = document.getElementById("cancelBtn");
+const openFolderBtn = document.getElementById("openFolderBtn");
+
+let scanInProgress = false;
+let downloadInProgress = false;
+let lastDownloadFolder = null;
+
+function hideOpenFolderButton() {
+    openFolderBtn.style.display = "none";
+    openFolderBtn.disabled = false;
+}
+
+function showOpenFolderButton() {
+    if (!lastDownloadFolder) return;
+    openFolderBtn.style.display = "inline-block";
+    openFolderBtn.disabled = false;
+}
+
+openFolderBtn.addEventListener("click", () => {
+    if (!lastDownloadFolder) return;
+    logDebug("[Renderer] Opening download folder:", lastDownloadFolder);
+    window.electronAPI.send("download:open-folder", lastDownloadFolder);
+});
 
 let scanInProgress = false;
 let downloadInProgress = false;
@@ -508,6 +530,9 @@ window.electronAPI.receive("options:load", (opt) => {
 
     currentBookmarks = opt.bookmarks ?? [];
     refreshBookmarkList();
+
+    lastDownloadFolder = null;
+    hideOpenFolderButton();
 
     if (opt.lastUrl && opt.lastUrl !== "about:blank") {
         urlInput.value = opt.lastUrl;

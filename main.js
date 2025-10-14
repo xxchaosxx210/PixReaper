@@ -1,6 +1,6 @@
 /* main.js */
 
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const { logDebug, logInfo, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
@@ -172,6 +172,25 @@ app.whenReady().then(() => {
         }
     });
 
+    ipcMain.on("download:open-folder", async (_event, folderPath) => {
+        if (!folderPath) {
+            logDebug("[Download] Ignoring open-folder request without a path.");
+            return;
+        }
+
+        try {
+            const resolvedPath = path.resolve(folderPath);
+            const result = await shell.openPath(resolvedPath);
+            if (result) {
+                logError(`[Download] Failed to open folder (${resolvedPath}): ${result}`);
+            } else {
+                logDebug(`[Download] Opened folder: ${resolvedPath}`);
+            }
+        } catch (err) {
+            logError("[Download] Error opening folder:", err);
+        }
+    });
+
     /* ---------- IPC: Folder Picker ---------- */
     ipcMain.on("choose-folder", async (event) => {
         logDebug("[Dialog] Folder picker opened.");
@@ -315,6 +334,12 @@ ipcMain.on("scan-page", async (event, links) => {
             }
         });
 
+        return worker;
+    };
+
+    const workerCount = Math.min(MAX_WORKERS, scanState.queue.length);
+    for (let i = 0; i < workerCount; i++) {
+        const worker = spawnWorker();
         assignNext(worker);
     }
 });
