@@ -1,20 +1,72 @@
 /* main.js */
 
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const { logDebug, logInfo, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
+const hostResolver = require("./logic/hostResolver");
 const { Worker } = require("worker_threads");
 const os = require("os");
 
 /* -------------------- Globals -------------------- */
 let mainWindow;
-let cancelScan = false;
 let cancelDownload = false;
-let activeWorkers = new Set();
+let currentScan = null;
 
-const MAX_WORKERS = Math.min(8, os.cpus().length);
+const cpuCount = os.cpus()?.length || 1;
+const MAX_WORKERS = Math.min(8, Math.max(1, cpuCount));
+
+function resolveScanSender(scanState) {
+    if (!scanState) return null;
+    const sender = scanState.event?.sender;
+    if (sender && !sender.isDestroyed()) {
+        return sender;
+    }
+    const fallback = mainWindow?.webContents;
+    if (fallback && !fallback.isDestroyed()) {
+        return fallback;
+    }
+    return null;
+}
+
+function cancelScan(scanState, { reason = "Scan cancelled.", notifyRenderer = true } = {}) {
+    if (!scanState || scanState.cancelled || scanState.hasFinished) {
+        return false;
+    }
+
+    const resultCount = Array.isArray(scanState.results) ? scanState.results.length : 0;
+    scanState.cancelled = true;
+    scanState.hasFinished = true;
+
+    if (Array.isArray(scanState.queue)) {
+        scanState.queue.length = 0;
+    }
+    scanState.inFlight = 0;
+
+    for (const worker of scanState.workers) {
+        worker
+            .terminate()
+            .catch((err) => logError("[Scan] Error terminating worker:", err));
+    }
+    scanState.workers.clear();
+
+    const sender = notifyRenderer ? resolveScanSender(scanState) : null;
+    if (sender) {
+        sender.send("scan:cancelled");
+    }
+
+    if (currentScan === scanState) {
+        currentScan = null;
+    }
+
+    scanState.results = [];
+    scanState.queue = [];
+    scanState.event = null;
+
+    logInfo(`[Scan] ${reason} Processed ${resultCount} links before cancellation.`);
+    return true;
+}
 
 /* -------------------- Window Creation -------------------- */
 function createWindow() {
@@ -36,6 +88,7 @@ function createWindow() {
     mainWindow.webContents.on("did-finish-load", () => {
         const currentOptions = optionsManager.loadOptions();
         setDebug(!!currentOptions.debugLogging);
+        hostResolver.refreshResolverOptions(currentOptions);
         mainWindow.webContents.send("options:load", currentOptions);
         logInfo("[Main] Renderer finished loading. Options sent to renderer.");
     });
@@ -53,8 +106,7 @@ function createWindow() {
     setTimeout(() => {
         logDebug("[Warmup] Preloading resolver modules...");
         try {
-            const { resolveLink } = require("./logic/hostResolver");
-            resolveLink("https://example.com").catch(() => { });
+            hostResolver.resolveLink("https://example.com").catch(() => { });
         } catch (e) {
             logError("[Warmup] Failed to preload:", e);
         }
@@ -71,6 +123,7 @@ app.whenReady().then(() => {
     ipcMain.on("options:save", (event, newOptions) => {
         const saved = optionsManager.saveOptions(newOptions);
         setDebug(!!saved.debugLogging);
+        hostResolver.refreshResolverOptions(saved);
         event.sender.send("options:saved", saved);
         if (!("lastUrl" in newOptions)) {
             mainWindow?.webContents?.send("options:load", saved);
@@ -91,6 +144,7 @@ app.whenReady().then(() => {
                     url: bookmark.url,
                 });
                 const saved = optionsManager.saveOptions(options);
+                hostResolver.refreshResolverOptions(saved);
                 mainWindow?.webContents?.send("options:load", saved);
                 event.sender.send("options:saved", saved);
                 logInfo(`[IPC] Bookmark added: ${bookmark.url}`);
@@ -113,6 +167,7 @@ app.whenReady().then(() => {
             );
             if (options.bookmarks.length < beforeCount) {
                 const saved = optionsManager.saveOptions(options);
+                hostResolver.refreshResolverOptions(saved);
                 mainWindow?.webContents?.send("options:load", saved);
                 event.sender.send("options:saved", saved);
                 logInfo(`[IPC] Bookmark removed: ${urlToRemove}`);
@@ -128,6 +183,7 @@ app.whenReady().then(() => {
         const defaults = optionsManager.getDefaultOptions();
         const saved = optionsManager.saveOptions(defaults);
         setDebug(!!saved.debugLogging);
+        hostResolver.refreshResolverOptions(saved);
         mainWindow?.webContents?.send("options:load", saved);
         event.sender.send("options:saved", saved);
         logInfo("[IPC] Options reset to defaults.");
@@ -168,6 +224,25 @@ app.whenReady().then(() => {
         }
     });
 
+    ipcMain.on("download:open-folder", async (_event, folderPath) => {
+        if (!folderPath) {
+            logDebug("[Download] Ignoring open-folder request without a path.");
+            return;
+        }
+
+        try {
+            const resolvedPath = path.resolve(folderPath);
+            const result = await shell.openPath(resolvedPath);
+            if (result) {
+                logError(`[Download] Failed to open folder (${resolvedPath}): ${result}`);
+            } else {
+                logDebug(`[Download] Opened folder: ${resolvedPath}`);
+            }
+        } catch (err) {
+            logError("[Download] Error opening folder:", err);
+        }
+    });
+
     /* ---------- IPC: Folder Picker ---------- */
     ipcMain.on("choose-folder", async (event) => {
         logDebug("[Dialog] Folder picker opened.");
@@ -202,75 +277,124 @@ app.on("activate", () => {
 
 /* -------------------- Scan Page (Persistent Worker Pool) -------------------- */
 ipcMain.on("scan-page", async (event, links) => {
-    logInfo(`[Scan] Starting scan for ${links.length} links using ${MAX_WORKERS} workers`);
-    cancelScan = false;
-    activeWorkers.clear();
+    const previousScan = currentScan;
+    if (previousScan && !previousScan.hasFinished && !previousScan.cancelled) {
+        logDebug("[Scan] Aborting previous scan before starting a new one.");
+        cancelScan(previousScan, {
+            reason: "Cancelled previous scan before starting a new one.",
+            notifyRenderer: false,
+        });
+    }
 
-    const queue = [...links];
-    const results = [];
+    const linkQueue = Array.isArray(links) ? [...links] : [];
+    logInfo(
+        `[Scan] Starting scan for ${linkQueue.length} links using ${MAX_WORKERS} workers`
+    );
+
+    const scanState = {
+        event,
+        queue: linkQueue,
+        results: [],
+        inFlight: 0,
+        workers: new Set(),
+        cancelled: false,
+        hasFinished: false,
+    };
+    currentScan = scanState;
+
+    const completeScan = () => {
+        if (scanState.hasFinished || scanState.cancelled) return;
+        scanState.hasFinished = true;
+
+        for (const worker of scanState.workers) {
+            worker
+                .terminate()
+                .catch((err) => logError("[Scan] Error terminating worker after completion:", err));
+        }
+        scanState.workers.clear();
+
+        const sender = resolveScanSender(scanState);
+        if (sender) sender.send("scan-complete", scanState.results);
+        if (currentScan === scanState) currentScan = null;
+        scanState.event = null;
+        scanState.queue = [];
+        logInfo(`[Scan] Completed all ${scanState.results.length} links.`);
+    };
+
+    const decrementInFlight = () => {
+        if (scanState.inFlight > 0) scanState.inFlight -= 1;
+    };
 
     const assignNext = (worker) => {
-        if (cancelScan) return;
-        const nextLink = queue.shift();
+        if (scanState.cancelled || scanState.hasFinished) return;
+        const nextLink = scanState.queue.shift();
         if (nextLink) {
-            logDebug(`[Scan] Assigning link → ${nextLink} (Active: ${activeWorkers.size}, Remaining: ${queue.length})`);
+            scanState.inFlight += 1;
+            logDebug(
+                `[Scan] Assigning link → ${nextLink} (Active: ${scanState.workers.size}, Remaining: ${scanState.queue.length}, InFlight: ${scanState.inFlight})`
+            );
             worker.postMessage(nextLink);
-        } else if (activeWorkers.size === 0 && !cancelScan) {
-            if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
-            logInfo(`[Scan] Completed all ${results.length} links.`);
+        } else if (scanState.inFlight === 0) {
+            completeScan();
         }
     };
 
-    for (let i = 0; i < MAX_WORKERS && queue.length > 0; i++) {
+    if (scanState.queue.length === 0) {
+        completeScan();
+        return;
+    }
+
+    const spawnWorker = () => {
         const worker = new Worker(path.join(__dirname, "logic", "linkWorker.js"));
-        activeWorkers.add(worker);
+        scanState.workers.add(worker);
         worker.unref();
 
         worker.on("message", (data) => {
-            if (cancelScan) return;
+            decrementInFlight();
+            if (scanState.cancelled || scanState.hasFinished) return;
             if (data) {
-                results.push(data);
-                if (!event.sender.isDestroyed()) event.sender.send("scan-progress", data);
+                scanState.results.push(data);
+                const sender = resolveScanSender(scanState);
+                if (sender) sender.send("scan-progress", data);
                 logDebug(`[Scan] ${data.status.toUpperCase()} → ${data.link} (${data.duration ?? "?"}ms)`);
             }
             assignNext(worker);
         });
 
         worker.on("error", (err) => {
+            decrementInFlight();
+            if (scanState.cancelled || scanState.hasFinished) return;
             logError("[Scan] Worker error:", err);
             assignNext(worker);
         });
 
         worker.on("exit", (code) => {
-            activeWorkers.delete(worker);
-            logDebug(`[Scan] Worker exited (${code}). Active: ${activeWorkers.size}`);
-            if (queue.length === 0 && activeWorkers.size === 0 && !cancelScan) {
-                if (!event.sender.isDestroyed()) event.sender.send("scan-complete", results);
-                logInfo("[Scan] All workers finished after exit.");
+            scanState.workers.delete(worker);
+            logDebug(`[Scan] Worker exited (${code}). Active: ${scanState.workers.size}`);
+            if (scanState.cancelled || scanState.hasFinished) {
+                if (scanState.workers.size === 0 && currentScan === scanState) {
+                    currentScan = null;
+                }
+                return;
+            }
+            if (scanState.queue.length === 0 && scanState.inFlight === 0 && scanState.workers.size === 0) {
+                completeScan();
             }
         });
 
+        return worker;
+    };
+
+    const workerCount = Math.min(MAX_WORKERS, scanState.queue.length);
+    for (let i = 0; i < workerCount; i++) {
+        const worker = spawnWorker();
         assignNext(worker);
     }
 });
 
 /* --- Cancel Scan --- */
 ipcMain.on("scan:cancel", () => {
-    logInfo("[Scan] Cancelling scan...");
-    cancelScan = true;
-
-    for (const worker of activeWorkers) {
-        try {
-            worker.terminate();
-        } catch (e) {
-            logError("[Scan] Error terminating worker:", e);
-        }
-    }
-
-    activeWorkers.clear();
-    logInfo("[Scan] Workers terminated.");
-
-    if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed()) {
-        mainWindow.webContents.send("scan:cancelled");
+    if (!cancelScan(currentScan, { reason: "Scan cancelled by user.", notifyRenderer: true })) {
+        logDebug("[Scan] No active scan to cancel.");
     }
 });

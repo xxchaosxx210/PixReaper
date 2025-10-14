@@ -199,6 +199,28 @@ const imagesFoundText = document.getElementById("imageCount");
 const progressBar = document.getElementById("progressBar");
 const downloadBtn = document.getElementById("downloadBtn");
 const cancelBtn = document.getElementById("cancelBtn");
+const openFolderBtn = document.getElementById("openFolderBtn");
+
+let scanInProgress = false;
+let downloadInProgress = false;
+let lastDownloadFolder = null;
+
+function hideOpenFolderButton() {
+    openFolderBtn.style.display = "none";
+    openFolderBtn.disabled = false;
+}
+
+function showOpenFolderButton() {
+    if (!lastDownloadFolder) return;
+    openFolderBtn.style.display = "inline-block";
+    openFolderBtn.disabled = false;
+}
+
+openFolderBtn.addEventListener("click", () => {
+    if (!lastDownloadFolder) return;
+    logDebug("[Renderer] Opening download folder:", lastDownloadFolder);
+    window.electronAPI.send("download:open-folder", lastDownloadFolder);
+});
 
 // --- Scan ---
 scanButton.addEventListener("click", async () => {
@@ -206,10 +228,15 @@ scanButton.addEventListener("click", async () => {
     currentManifest = [];
     downloadBtn.style.display = "none";
     cancelBtn.style.display = "inline-block";
+    cancelBtn.disabled = false;
+    hideOpenFolderButton();
+    lastDownloadFolder = null;
     imagesFound = 0;
     imagesFoundText.textContent = "Images found: 0";
     statusText.textContent = "Status: Scanning...";
     progressBar.style.width = "0%";
+    scanInProgress = true;
+    downloadInProgress = false;
 
     const hostText = document.getElementById("hostList").value || "";
     const validHosts = hostText.split("\n").map(h => h.trim().toLowerCase()).filter(Boolean);
@@ -224,6 +251,30 @@ scanButton.addEventListener("click", async () => {
 
     logInfo(`[Renderer] Scanning ${filteredLinks.length} links...`);
     window.electronAPI.send("scan-page", filteredLinks);
+});
+
+cancelBtn.addEventListener("click", () => {
+    if (downloadInProgress) {
+        logInfo("[Renderer] Cancelling download queue...");
+        statusText.textContent = "Status: Cancelling download...";
+        cancelBtn.disabled = true;
+        window.electronAPI.send("download:cancel");
+        return;
+    }
+
+    if (scanInProgress) {
+        logInfo("[Renderer] Cancelling active scan...");
+        statusText.textContent = "Status: Cancelling scan...";
+        cancelBtn.disabled = true;
+        window.electronAPI.send("scan:cancel");
+        return;
+    }
+
+    logDebug("[Renderer] Cancel button pressed with no active scan or download.");
+    cancelBtn.style.display = "none";
+    cancelBtn.disabled = false;
+    scanInProgress = false;
+    downloadInProgress = false;
 });
 
 // --- Scan Progress ---
@@ -253,6 +304,8 @@ window.electronAPI.receive("scan-complete", () => {
 
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
+    scanInProgress = false;
+    hideOpenFolderButton();
 
     if (resultsList.children.length > 0) {
         statusText.textContent = "Status: Scan complete. Ready to download.";
@@ -269,6 +322,8 @@ window.electronAPI.receive("scan:cancelled", () => {
     statusText.textContent = "Status: Scan cancelled.";
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
+    scanInProgress = false;
+    hideOpenFolderButton();
     logInfo("[Renderer] Scan cancelled and workers terminated.");
 });
 
@@ -341,6 +396,10 @@ function deriveSlugFromUrl(url) {
 downloadBtn.addEventListener("click", async () => {
     downloadBtn.style.display = "none";
     cancelBtn.style.display = "inline-block";
+    cancelBtn.disabled = false;
+    scanInProgress = false;
+    hideOpenFolderButton();
+    lastDownloadFolder = null;
     logInfo("[Renderer] Preparing download manifest...");
 
     const options = {
@@ -380,8 +439,17 @@ downloadBtn.addEventListener("click", async () => {
 
     downloadTotal = currentManifest.length;
     downloadCompleted = 0;
-    statusText.textContent = `Status: Downloading (0/${downloadTotal}) — 0%`;
     progressBar.style.width = "0%";
+    if (downloadTotal > 0) {
+        statusText.textContent = `Status: Downloading (0/${downloadTotal}) — 0%`;
+        downloadInProgress = true;
+        lastDownloadFolder = folder;
+    } else {
+        statusText.textContent = "Status: No downloads queued.";
+        cancelBtn.style.display = "none";
+        downloadInProgress = false;
+        lastDownloadFolder = null;
+    }
 
     logInfo(`[Renderer] Sending ${downloadTotal} downloads to main process.`);
     window.electronAPI.send("download:start", {
@@ -395,6 +463,8 @@ window.electronAPI.receive("download:cancelled", () => {
     statusText.textContent = "Status: Download cancelled.";
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
+    downloadInProgress = false;
+    showOpenFolderButton();
     logInfo("[Renderer] Download cancelled by user.");
 });
 
@@ -438,6 +508,8 @@ window.electronAPI.receive("download:complete", () => {
     cancelBtn.disabled = false;
     statusText.textContent = "Status: All downloads complete.";
     progressBar.style.width = "100%";
+    downloadInProgress = false;
+    showOpenFolderButton();
     logInfo("[Renderer] All downloads complete.");
 });
 
@@ -466,6 +538,9 @@ window.electronAPI.receive("options:load", (opt) => {
     currentBookmarks = opt.bookmarks ?? [];
     refreshBookmarkList();
 
+    lastDownloadFolder = null;
+    hideOpenFolderButton();
+
     if (opt.lastUrl && opt.lastUrl !== "about:blank") {
         urlInput.value = opt.lastUrl;
         navigateTo(opt.lastUrl);
@@ -476,10 +551,3 @@ window.electronAPI.receive("options:load", (opt) => {
 
 });
 
-// --- Scan Cancelled Feedback ---
-window.electronAPI.receive("scan:cancelled", () => {
-    statusText.textContent = "Status: Scan cancelled.";
-    cancelBtn.style.display = "none";
-    cancelBtn.disabled = false;
-    logInfo("[Renderer] Scan cancelled and workers terminated.");
-});
