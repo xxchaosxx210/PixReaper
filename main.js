@@ -7,15 +7,11 @@ const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
 const hostResolver = require("./logic/hostResolver");
 const { Worker } = require("worker_threads");
-const os = require("os");
 
 /* -------------------- Globals -------------------- */
 let mainWindow;
 let cancelDownload = false;
 let currentScan = null;
-
-const cpuCount = os.cpus()?.length || 1;
-const MAX_WORKERS = Math.min(8, Math.max(1, cpuCount));
 
 /* -------------------- Window Creation -------------------- */
 function createWindow() {
@@ -141,6 +137,12 @@ app.whenReady().then(() => {
     ipcMain.on("download:start", async (event, { manifest, options }) => {
         logInfo(`[Download] Starting download of ${manifest.length} files.`);
         cancelDownload = false;
+
+        // Determine concurrency based on Max Connections from options
+        const userOptions = optionsManager.loadOptions();
+        const MAX_CONNECTIONS = Math.min(16, Math.max(1, userOptions.maxConnections || 4));
+        options.maxConnections = MAX_CONNECTIONS;
+
         try {
             await downloader.startDownload(
                 manifest,
@@ -155,6 +157,7 @@ app.whenReady().then(() => {
                 },
                 () => cancelDownload
             );
+
             if (!cancelDownload) {
                 logInfo("[Download] All downloads completed successfully.");
                 event.sender.send("download:complete");
@@ -224,6 +227,11 @@ ipcMain.on("scan-page", async (event, links) => {
     }
 
     const queue = Array.isArray(links) ? [...links] : [];
+
+    // Load max connections from options
+    const userOptions = optionsManager.loadOptions();
+    const MAX_WORKERS = Math.min(16, Math.max(1, userOptions.maxConnections || 4));
+
     logInfo(`[Scan] Starting scan for ${queue.length} links using ${MAX_WORKERS} workers`);
 
     const scanState = {

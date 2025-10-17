@@ -11,28 +11,23 @@ const { app } = require("electron");
 const { loadOptions } = require("../config/optionsManager"); // ✅ import options
 
 const streamPipeline = promisify(pipeline);
-
-// Default retries
 const MAX_RETRIES = 3;
 
-/**
- * Build regex for allowed extensions from options
- */
+/* -------------------------------------------------------------
+ * Build regex for allowed extensions based on user options
+ * -----------------------------------------------------------*/
 function getExtRegex() {
     const options = loadOptions();
-    const valid = options.validExtensions && options.validExtensions.length > 0
-        ? options.validExtensions
-        : ["jpg", "jpeg"]; // fallback default
-
+    const valid =
+        options.validExtensions && options.validExtensions.length > 0
+            ? options.validExtensions
+            : ["jpg", "jpeg"]; // fallback default
     return new RegExp(`\\.(${valid.join("|")})(?:$|\\?)`, "i");
 }
 
-/**
- * Download a single file from URL to savePath
- * - follows redirects
- * - validates content-type is image/*
- * - validates extension against allowed list
- */
+/* -------------------------------------------------------------
+ * Download a single file (follows redirects, validates type)
+ * -----------------------------------------------------------*/
 async function downloadFile(url, savePath, redirectCount = 0) {
     const MAX_REDIRECTS = 5;
 
@@ -44,7 +39,7 @@ async function downloadFile(url, savePath, redirectCount = 0) {
     absolutePath = path.normalize(absolutePath);
     await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
 
-    // ✅ Extension check (based on URL or savePath)
+    // Validate file extension
     const extRegex = getExtRegex();
     const checkTarget = url.split("?")[0].toLowerCase();
     if (!extRegex.test(checkTarget)) {
@@ -59,8 +54,8 @@ async function downloadFile(url, savePath, redirectCount = 0) {
             {
                 headers: {
                     "User-Agent": "PixReaper/1.0",
-                    "Referer": url   // ⚠️ sometimes needed for hotlink-protected hosts
-                }
+                    Referer: url, // sometimes required for hotlink-protected hosts
+                },
             },
             (res) => {
                 // Handle redirects
@@ -79,7 +74,7 @@ async function downloadFile(url, savePath, redirectCount = 0) {
                     return;
                 }
 
-                // Non-200 response
+                // Non-OK status
                 if (res.statusCode !== 200) {
                     reject(new Error(`HTTP ${res.statusCode}`));
                     return;
@@ -89,11 +84,11 @@ async function downloadFile(url, savePath, redirectCount = 0) {
                 const contentType = res.headers["content-type"] || "";
                 if (!contentType.startsWith("image/")) {
                     reject(new Error(`Invalid content-type: ${contentType}`));
-                    res.resume(); // discard body
+                    res.resume();
                     return;
                 }
 
-                // Write to file
+                // Stream file to disk
                 const fileStream = fs.createWriteStream(absolutePath);
                 streamPipeline(res, fileStream)
                     .then(() => resolve(absolutePath))
@@ -105,9 +100,9 @@ async function downloadFile(url, savePath, redirectCount = 0) {
     });
 }
 
-/**
- * Attempt a download with retry logic
- */
+/* -------------------------------------------------------------
+ * Download a single item with retry & cancel support
+ * -----------------------------------------------------------*/
 async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, isCancelled) {
     let attempt = 0;
 
@@ -120,17 +115,20 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
 
         try {
             const absolutePath = await downloadFile(item.url, item.savePath);
+
             if (isCancelled && isCancelled()) {
                 item.status = "cancelled";
                 onProgress(item.index, "cancelled", item.savePath);
                 return;
             }
+
             item.status = "success";
             item.savePath = absolutePath;
             onProgress(item.index, "success", absolutePath);
             return;
         } catch (err) {
             attempt++;
+
             if (isCancelled && isCancelled()) {
                 item.status = "cancelled";
                 onProgress(item.index, "cancelled", item.savePath);
@@ -143,30 +141,45 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
                 onProgress(item.index, "failed", item.savePath);
                 return;
             } else {
+                console.warn(`[Downloader] Retry ${attempt}/${maxRetries}: ${item.url}`);
                 onProgress(item.index, "retrying", item.savePath);
-                await new Promise((res) => setTimeout(res, 500 * attempt));
+                await new Promise((res) => setTimeout(res, 500 * attempt)); // backoff
             }
         }
     }
 }
 
-/**
- * Run downloads with concurrency limit
- */
+/* -------------------------------------------------------------
+ * Run multiple downloads concurrently (based on maxConnections)
+ * -----------------------------------------------------------*/
 async function startDownload(manifest, options, onProgress, isCancelled) {
-    const maxConnections = options.maxConnections || 5;
+    // Priority: options passed from main.js → fallback to user saved options → default 4
+    const userOptions = loadOptions();
+    const maxConnections =
+        options?.maxConnections ||
+        userOptions?.maxConnections ||
+        4;
+
+    const MAX_CONCURRENCY = Math.min(16, Math.max(1, maxConnections));
+
+    console.log(`[Downloader] Starting ${manifest.length} downloads with ${MAX_CONCURRENCY} connections`);
 
     let active = 0;
     let index = 0;
 
     return new Promise((resolve) => {
         function next() {
-            if ((index >= manifest.length || (isCancelled && isCancelled())) && active === 0) {
+            // Complete when no more downloads are left and all active have finished
+            if (
+                (index >= manifest.length || (isCancelled && isCancelled())) &&
+                active === 0
+            ) {
                 resolve();
                 return;
             }
 
-            while (active < maxConnections && index < manifest.length) {
+            // Launch new downloads up to concurrency limit
+            while (active < MAX_CONCURRENCY && index < manifest.length) {
                 if (isCancelled && isCancelled()) {
                     resolve();
                     return;
@@ -178,7 +191,7 @@ async function startDownload(manifest, options, onProgress, isCancelled) {
                 downloadWithRetries(item, onProgress, MAX_RETRIES, isCancelled)
                     .finally(() => {
                         active--;
-                        next();
+                        next(); // start next file after one finishes
                     });
             }
         }
@@ -187,6 +200,9 @@ async function startDownload(manifest, options, onProgress, isCancelled) {
     });
 }
 
+/* -------------------------------------------------------------
+ * Exports
+ * -----------------------------------------------------------*/
 module.exports = {
     startDownload,
 };
