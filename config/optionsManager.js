@@ -35,6 +35,7 @@ const DEFAULT_OPTIONS = {
         "imageupper.com"
     ],
     lastUrl: "about:blank",
+    autoOpenFolder: false,
     bookmarks: [] // { title, url }
 };
 
@@ -86,6 +87,8 @@ function loadOptions() {
                 title: String(b.title || b.url).trim(),
                 url: String(b.url).trim()
             }));
+        if (typeof merged.autoOpenFolder !== "boolean")
+            merged.autoOpenFolder = DEFAULT_OPTIONS.autoOpenFolder;
 
         return merged;
     } catch (err) {

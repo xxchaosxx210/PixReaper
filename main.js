@@ -1,6 +1,6 @@
 /* main.js */
 
-const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
 const { logDebug, logInfo, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
@@ -138,7 +138,7 @@ app.whenReady().then(() => {
         logInfo(`[Download] Starting download of ${manifest.length} files.`);
         cancelDownload = false;
 
-        // Determine concurrency based on Max Connections from options
+        // ✅ Load user options to determine concurrency and preferences
         const userOptions = optionsManager.loadOptions();
         const MAX_CONNECTIONS = Math.min(16, Math.max(1, userOptions.maxConnections || 4));
         options.maxConnections = MAX_CONNECTIONS;
@@ -161,6 +161,19 @@ app.whenReady().then(() => {
             if (!cancelDownload) {
                 logInfo("[Download] All downloads completed successfully.");
                 event.sender.send("download:complete");
+
+                // ✅ Auto-open folder if enabled in user options
+                if (userOptions.autoOpenFolder) {
+                    try {
+                        await shell.openPath(options.savePath);
+                        logInfo(`[Download] Opened download folder: ${options.savePath}`);
+                    } catch (err) {
+                        logError("[Download] Failed to open folder:", err);
+                    }
+                }
+            } else {
+                logInfo("[Download] Download cancelled by user.");
+                event.sender.send("download:cancelled");
             }
         } catch (err) {
             logError("[Download] Download error:", err);

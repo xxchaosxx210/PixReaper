@@ -339,6 +339,7 @@ saveOptions.addEventListener("click", () => {
         indexing: document.querySelector('input[name="indexing"]:checked').value,
         maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
         debugLogging: document.getElementById("debugLogging").checked,
+        autoOpenFolder: document.getElementById("autoOpenFolder").checked,
         validExtensions: selectedExts,
         validHosts: hostList,
         bottomPanelHeight: parseInt(bottomPanel.style.height, 10) || null
@@ -489,6 +490,7 @@ window.electronAPI.receive("options:load", (opt) => {
     document.getElementById("prefix").value = opt.prefix ?? "";
     document.getElementById("savePath").value = opt.savePath ?? "";
     document.getElementById("subfolder").checked = !!opt.createSubfolder;
+    document.getElementById("autoOpenFolder").checked = !!opt.autoOpenFolder;
 
     const indexing = opt.indexing ?? "order";
     document.querySelectorAll('input[name="indexing"]').forEach(r => r.checked = r.value === indexing);
