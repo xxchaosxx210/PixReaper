@@ -443,36 +443,49 @@ window.electronAPI.receive("download:cancelled", () => {
 
 
 // --- Download Progress ---
+// --- Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
-    downloadCompleted = currentManifest.filter(e => e.status === "success").length;
-    const percent = ((downloadCompleted / downloadTotal) * 100).toFixed(1);
-    statusText.textContent = `Status: Downloading (${downloadCompleted}/${downloadTotal}) — ${percent}%`;
-    progressBar.style.width = `${percent}%`;
     const { index, status, savePath } = data;
     const entry = currentManifest.find(e => e.index === index);
     if (entry) entry.status = status;
+
+    // Update progress bar (success only counts toward completion)
+    const completedCount = currentManifest.filter(e => e.status === "success" || e.status === "skipped").length;
+    const percent = ((completedCount / downloadTotal) * 100).toFixed(1);
+    statusText.textContent = `Status: Downloading (${completedCount}/${downloadTotal}) — ${percent}%`;
+    progressBar.style.width = `${percent}%`;
+
     const li = resultsList.querySelector(`li[data-index="${index}"]`);
-    if (li) {
-        li.className = status;
-        const icon = li.querySelector(".status-icon");
-        if (icon) icon.className = `status-icon ${status}`;
-        const link = li.querySelector("a");
-        if (!link) return;
-        if (status === "success") {
-            link.textContent = savePath;
-            link.href = "file:///" + savePath.replace(/\\/g, "/");
-        } else if (status === "retrying") {
-            link.textContent = "Retrying download...";
-            link.removeAttribute("href");
-            link.style.color = "orange";
-        } else if (status === "failed") {
-            link.textContent = "Failed: " + entry.url;
-            link.href = entry.url;
-            link.style.color = "red";
-        } else if (status === "cancelled") {
-            link.textContent = "Cancelled: " + entry.url;
-            link.style.color = "gray";
-        }
+    if (!li) return;
+    li.className = status;
+
+    const icon = li.querySelector(".status-icon");
+    if (icon) icon.className = `status-icon ${status}`;
+    const link = li.querySelector("a");
+    if (!link) return;
+
+    if (status === "success") {
+        link.textContent = savePath;
+        link.href = "file:///" + savePath.replace(/\\/g, "/");
+        link.style.color = "#333";
+    }
+    else if (status === "retrying") {
+        link.textContent = "Retrying download...";
+        link.removeAttribute("href");
+        link.style.color = "orange";
+    }
+    else if (status === "failed") {
+        link.textContent = "Failed: " + entry.url;
+        link.href = entry.url;
+        link.style.color = "red";
+    }
+    else if (status === "cancelled") {
+        link.textContent = "Cancelled: " + entry.url;
+        link.style.color = "gray";
+    }
+    else if (status === "skipped") {
+        link.textContent = "Skipped duplicate file";
+        link.style.color = "#777";
     }
 });
 

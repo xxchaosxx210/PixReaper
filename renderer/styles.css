@@ -533,3 +533,12 @@ button.danger:hover {
         opacity: 1;
     }
 }
+
+#results li.skipped {
+    border-left-color: #9e9e9e;
+}
+
+#results li.skipped .status-icon::before {
+    content: "⏭️";
+    color: #9e9e9e;
+}

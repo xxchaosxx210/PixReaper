@@ -26,7 +26,7 @@ function getExtRegex() {
 }
 
 /* -------------------------------------------------------------
- * Download a single file (follows redirects, validates type)
+ * Download a single file with duplicate check
  * -----------------------------------------------------------*/
 async function downloadFile(url, savePath, redirectCount = 0) {
     const MAX_REDIRECTS = 5;
@@ -88,15 +88,51 @@ async function downloadFile(url, savePath, redirectCount = 0) {
                     return;
                 }
 
-                // Stream file to disk
-                const fileStream = fs.createWriteStream(absolutePath);
-                streamPipeline(res, fileStream)
-                    .then(() => resolve(absolutePath))
-                    .catch(reject);
+                // --- 🧠 SMART DUPLICATE CHECK ---
+                const totalBytes = parseInt(res.headers["content-length"] || "0", 10);
+
+                if (fs.existsSync(absolutePath)) {
+                    const existingSize = fs.statSync(absolutePath).size;
+
+                    // ✅ Fast path: content-length available and identical
+                    if (totalBytes > 0 && existingSize === totalBytes) {
+                        res.resume(); // discard data
+                        return resolve({ status: "skipped", savePath: absolutePath });
+                    }
+                }
+
+                // Temp file for safe write
+                const tempPath = absolutePath + ".tmp";
+                const fileStream = fs.createWriteStream(tempPath);
+
+                res.pipe(fileStream);
+
+                fileStream.on("finish", () => {
+                    fileStream.close();
+
+                    // ✅ Fallback duplicate check if no content-length header
+                    if (fs.existsSync(absolutePath) && totalBytes === 0) {
+                        const existingSize = fs.statSync(absolutePath).size;
+                        const newSize = fs.statSync(tempPath).size;
+                        if (existingSize === newSize) {
+                            fs.unlinkSync(tempPath);
+                            return resolve({ status: "skipped", savePath: absolutePath });
+                        }
+                    }
+
+                    // ✅ Replace or save new file
+                    fs.renameSync(tempPath, absolutePath);
+                    resolve({ status: "success", savePath: absolutePath });
+                });
             }
         );
 
-        req.on("error", reject);
+        req.on("error", (err) => {
+            // Clean up temp file if error
+            const tempPath = savePath + ".tmp";
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            reject(err);
+        });
     });
 }
 
@@ -114,7 +150,7 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
         }
 
         try {
-            const absolutePath = await downloadFile(item.url, item.savePath);
+            const result = await downloadFile(item.url, item.savePath);
 
             if (isCancelled && isCancelled()) {
                 item.status = "cancelled";
@@ -122,9 +158,8 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
                 return;
             }
 
-            item.status = "success";
-            item.savePath = absolutePath;
-            onProgress(item.index, "success", absolutePath);
+            item.status = result.status || "success";
+            onProgress(item.index, item.status, result.savePath);
             return;
         } catch (err) {
             attempt++;
@@ -153,15 +188,11 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
  * Run multiple downloads concurrently (based on maxConnections)
  * -----------------------------------------------------------*/
 async function startDownload(manifest, options, onProgress, isCancelled) {
-    // Priority: options passed from main.js → fallback to user saved options → default 4
     const userOptions = loadOptions();
     const maxConnections =
-        options?.maxConnections ||
-        userOptions?.maxConnections ||
-        4;
+        options?.maxConnections || userOptions?.maxConnections || 4;
 
     const MAX_CONCURRENCY = Math.min(16, Math.max(1, maxConnections));
-
     console.log(`[Downloader] Starting ${manifest.length} downloads with ${MAX_CONCURRENCY} connections`);
 
     let active = 0;
@@ -169,16 +200,11 @@ async function startDownload(manifest, options, onProgress, isCancelled) {
 
     return new Promise((resolve) => {
         function next() {
-            // Complete when no more downloads are left and all active have finished
-            if (
-                (index >= manifest.length || (isCancelled && isCancelled())) &&
-                active === 0
-            ) {
+            if ((index >= manifest.length || (isCancelled && isCancelled())) && active === 0) {
                 resolve();
                 return;
             }
 
-            // Launch new downloads up to concurrency limit
             while (active < MAX_CONCURRENCY && index < manifest.length) {
                 if (isCancelled && isCancelled()) {
                     resolve();
@@ -191,7 +217,7 @@ async function startDownload(manifest, options, onProgress, isCancelled) {
                 downloadWithRetries(item, onProgress, MAX_RETRIES, isCancelled)
                     .finally(() => {
                         active--;
-                        next(); // start next file after one finishes
+                        next();
                     });
             }
         }
