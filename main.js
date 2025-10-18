@@ -138,7 +138,7 @@ app.whenReady().then(() => {
         logInfo(`[Download] Starting download of ${manifest.length} files.`);
         cancelDownload = false;
 
-        // ✅ Load user options to determine concurrency and preferences
+        // Load user options for concurrency & preferences
         const userOptions = optionsManager.loadOptions();
         const MAX_CONNECTIONS = Math.min(16, Math.max(1, userOptions.maxConnections || 4));
         options.maxConnections = MAX_CONNECTIONS;
@@ -150,7 +150,9 @@ app.whenReady().then(() => {
                 (index, status, savePath) => {
                     if (cancelDownload) {
                         logInfo("[Download] Download cancelled mid-process.");
-                        event.sender.send("download:complete");
+                        event.sender.send("download:complete", {
+                            summary: { cancelled: true }
+                        });
                         return;
                     }
                     event.sender.send("download:progress", { index, status, savePath });
@@ -159,11 +161,25 @@ app.whenReady().then(() => {
             );
 
             if (!cancelDownload) {
-                logInfo("[Download] All downloads completed successfully.");
-                event.sender.send("download:complete");
+                // ✅ Build detailed summary
+                const summary = {
+                    success: manifest.filter(e => e.status === "success").length,
+                    skipped: manifest.filter(e => e.status === "skipped").length,
+                    failed: manifest.filter(e => e.status === "failed").length,
+                    cancelled: manifest.filter(e => e.status === "cancelled").length,
+                    total: manifest.length
+                };
 
-                // ✅ Auto-open folder if enabled in user options
-                if (userOptions.autoOpenFolder) {
+                logInfo(
+                    `[Download] Completed: ${summary.success} success, ` +
+                    `${summary.skipped} skipped, ${summary.failed} failed.`
+                );
+
+                // Notify renderer
+                event.sender.send("download:complete", { summary });
+
+                // ✅ Auto-open download folder if enabled
+                if (userOptions.autoOpenFolder && options.savePath) {
                     try {
                         await shell.openPath(options.savePath);
                         logInfo(`[Download] Opened download folder: ${options.savePath}`);
@@ -179,6 +195,7 @@ app.whenReady().then(() => {
             logError("[Download] Download error:", err);
         }
     });
+
 
     ipcMain.on("download:cancel", () => {
         logInfo("[Download] Cancelling downloads...");

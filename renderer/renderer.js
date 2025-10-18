@@ -489,14 +489,28 @@ window.electronAPI.receive("download:progress", (data) => {
     }
 });
 
-window.electronAPI.receive("download:complete", () => {
+window.electronAPI.receive("download:complete", (data = {}) => {
     cancelBtn.style.display = "none";
     cancelBtn.disabled = false;
-    statusText.textContent = "Status: All downloads complete.";
     progressBar.style.width = "100%";
     downloadInProgress = false;
-    logInfo("[Renderer] All downloads complete.");
+
+    const summary = data.summary || {};
+    const { success = 0, skipped = 0, failed = 0, cancelled = 0, total = 0 } = summary;
+
+    let text = "Status: All downloads complete.";
+    if (total > 0) {
+        text = `Status: Completed — ${success} downloaded`;
+        if (skipped > 0) text += `, ${skipped} skipped`;
+        if (failed > 0) text += `, ${failed} failed`;
+        if (cancelled > 0) text += `, ${cancelled} cancelled`;
+        text += ` (Total: ${total})`;
+    }
+
+    statusText.textContent = text;
+    logInfo("[Renderer] " + text);
 });
+
 
 // --- IPC: Options Load ---
 window.electronAPI.receive("options:load", (opt) => {
