@@ -3,14 +3,12 @@
 
 const fs = require("fs");
 const path = require("path");
-const { pipeline } = require("stream");
-const { promisify } = require("util");
 const https = require("https");
 const http = require("http");
+const crypto = require("crypto");
 const { app } = require("electron");
-const { loadOptions } = require("../config/optionsManager"); // ✅ import options
+const { loadOptions } = require("../config/optionsManager");
 
-const streamPipeline = promisify(pipeline);
 const MAX_RETRIES = 3;
 
 /* -------------------------------------------------------------
@@ -21,23 +19,72 @@ function getExtRegex() {
     const valid =
         options.validExtensions && options.validExtensions.length > 0
             ? options.validExtensions
-            : ["jpg", "jpeg"]; // fallback default
+            : ["jpg", "jpeg"];
     return new RegExp(`\\.(${valid.join("|")})(?:$|\\?)`, "i");
 }
 
 /* -------------------------------------------------------------
- * Download a single file with duplicate check
+ * Utility: Compute MD5 hash of a file
+ * -----------------------------------------------------------*/
+function computeFileHash(filePath) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash("md5");
+        const stream = fs.createReadStream(filePath);
+        stream.on("data", (data) => hash.update(data));
+        stream.on("end", () => resolve(hash.digest("hex")));
+        stream.on("error", reject);
+    });
+}
+
+/* -------------------------------------------------------------
+ * Utility: Check folder for duplicates by size (and optional hash)
+ * -----------------------------------------------------------*/
+async function findDuplicateInFolder(folderPath, targetSize, tempFilePath) {
+    if (!fs.existsSync(folderPath)) return null;
+    const files = fs.readdirSync(folderPath);
+    for (const file of files) {
+        const fullPath = path.join(folderPath, file);
+        if (!fs.existsSync(fullPath) || fullPath === tempFilePath) continue;
+
+        const stat = fs.statSync(fullPath);
+        if (!stat.isFile()) continue;
+
+        // Quick skip if not an image
+        if (!/\.(jpe?g|png|gif|webp|bmp|avif|tiff)$/i.test(fullPath)) continue;
+
+        // Compare by size first
+        if (stat.size === targetSize) {
+            return fullPath; // identical size → likely duplicate
+        }
+
+        // If sizes are within 1KB, check hash to be sure
+        const sizeDiff = Math.abs(stat.size - targetSize);
+        if (sizeDiff < 1024) {
+            try {
+                const [hashA, hashB] = await Promise.all([
+                    computeFileHash(fullPath),
+                    computeFileHash(tempFilePath)
+                ]);
+                if (hashA === hashB) return fullPath;
+            } catch (_) { /* ignore hash errors */ }
+        }
+    }
+    return null;
+}
+
+/* -------------------------------------------------------------
+ * Download a single file with smart duplicate detection
  * -----------------------------------------------------------*/
 async function downloadFile(url, savePath, redirectCount = 0) {
     const MAX_REDIRECTS = 5;
 
-    // Ensure absolute path
     let absolutePath = path.isAbsolute(savePath)
         ? savePath
         : path.join(app.getPath("downloads"), savePath);
 
     absolutePath = path.normalize(absolutePath);
-    await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
+    const folderPath = path.dirname(absolutePath);
+    await fs.promises.mkdir(folderPath, { recursive: true });
 
     // Validate file extension
     const extRegex = getExtRegex();
@@ -54,11 +101,10 @@ async function downloadFile(url, savePath, redirectCount = 0) {
             {
                 headers: {
                     "User-Agent": "PixReaper/1.0",
-                    Referer: url, // sometimes required for hotlink-protected hosts
+                    Referer: url,
                 },
             },
-            (res) => {
-                // Handle redirects
+            async (res) => {
                 if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
                     if (redirectCount >= MAX_REDIRECTS) {
                         reject(new Error("Too many redirects"));
@@ -74,13 +120,11 @@ async function downloadFile(url, savePath, redirectCount = 0) {
                     return;
                 }
 
-                // Non-OK status
                 if (res.statusCode !== 200) {
                     reject(new Error(`HTTP ${res.statusCode}`));
                     return;
                 }
 
-                // Validate content-type
                 const contentType = res.headers["content-type"] || "";
                 if (!contentType.startsWith("image/")) {
                     reject(new Error(`Invalid content-type: ${contentType}`));
@@ -88,47 +132,38 @@ async function downloadFile(url, savePath, redirectCount = 0) {
                     return;
                 }
 
-                // --- 🧠 SMART DUPLICATE CHECK ---
                 const totalBytes = parseInt(res.headers["content-length"] || "0", 10);
-
-                if (fs.existsSync(absolutePath)) {
-                    const existingSize = fs.statSync(absolutePath).size;
-
-                    // ✅ Fast path: content-length available and identical
-                    if (totalBytes > 0 && existingSize === totalBytes) {
-                        res.resume(); // discard data
-                        return resolve({ status: "skipped", savePath: absolutePath });
-                    }
-                }
-
-                // Temp file for safe write
                 const tempPath = absolutePath + ".tmp";
                 const fileStream = fs.createWriteStream(tempPath);
-
                 res.pipe(fileStream);
 
-                fileStream.on("finish", () => {
+                fileStream.on("finish", async () => {
                     fileStream.close();
 
-                    // ✅ Fallback duplicate check if no content-length header
-                    if (fs.existsSync(absolutePath) && totalBytes === 0) {
-                        const existingSize = fs.statSync(absolutePath).size;
+                    try {
                         const newSize = fs.statSync(tempPath).size;
-                        if (existingSize === newSize) {
-                            fs.unlinkSync(tempPath);
-                            return resolve({ status: "skipped", savePath: absolutePath });
-                        }
-                    }
+                        const existingDuplicate = await findDuplicateInFolder(
+                            folderPath,
+                            totalBytes > 0 ? totalBytes : newSize,
+                            tempPath
+                        );
 
-                    // ✅ Replace or save new file
-                    fs.renameSync(tempPath, absolutePath);
-                    resolve({ status: "success", savePath: absolutePath });
+                        if (existingDuplicate) {
+                            fs.unlinkSync(tempPath);
+                            return resolve({ status: "skipped", savePath: existingDuplicate });
+                        }
+
+                        fs.renameSync(tempPath, absolutePath);
+                        resolve({ status: "success", savePath: absolutePath });
+                    } catch (err) {
+                        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+                        reject(err);
+                    }
                 });
             }
         );
 
         req.on("error", (err) => {
-            // Clean up temp file if error
             const tempPath = savePath + ".tmp";
             if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
             reject(err);
@@ -137,7 +172,7 @@ async function downloadFile(url, savePath, redirectCount = 0) {
 }
 
 /* -------------------------------------------------------------
- * Download a single item with retry & cancel support
+ * Download with retry & cancel support
  * -----------------------------------------------------------*/
 async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, isCancelled) {
     let attempt = 0;
@@ -151,7 +186,6 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
 
         try {
             const result = await downloadFile(item.url, item.savePath);
-
             if (isCancelled && isCancelled()) {
                 item.status = "cancelled";
                 onProgress(item.index, "cancelled", item.savePath);
@@ -163,7 +197,6 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
             return;
         } catch (err) {
             attempt++;
-
             if (isCancelled && isCancelled()) {
                 item.status = "cancelled";
                 onProgress(item.index, "cancelled", item.savePath);
@@ -178,14 +211,14 @@ async function downloadWithRetries(item, onProgress, maxRetries = MAX_RETRIES, i
             } else {
                 console.warn(`[Downloader] Retry ${attempt}/${maxRetries}: ${item.url}`);
                 onProgress(item.index, "retrying", item.savePath);
-                await new Promise((res) => setTimeout(res, 500 * attempt)); // backoff
+                await new Promise((res) => setTimeout(res, 500 * attempt));
             }
         }
     }
 }
 
 /* -------------------------------------------------------------
- * Run multiple downloads concurrently (based on maxConnections)
+ * Run multiple downloads concurrently
  * -----------------------------------------------------------*/
 async function startDownload(manifest, options, onProgress, isCancelled) {
     const userOptions = loadOptions();
