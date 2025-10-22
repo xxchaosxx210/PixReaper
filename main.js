@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const { logDebug, logInfo, logError, setDebug } = require("./utils/logger");
 const optionsManager = require("./config/optionsManager");
 const downloader = require("./logic/downloader");
@@ -133,8 +134,33 @@ app.whenReady().then(() => {
         logInfo("[IPC] Options reset to defaults.");
     });
 
+    ipcMain.on("log:open", async () => {
+        try {
+            // Default log path (adjust if your logger writes elsewhere)
+            const logFilePath = path.join(app.getPath("userData"), "logs", "PixReaper.log");
+
+            if (!fs.existsSync(logFilePath)) {
+                dialog.showMessageBox({
+                    type: "info",
+                    title: "No Log File Found",
+                    message: "The log file does not exist yet. Try again after running PixReaper for a bit.",
+                });
+                return;
+            }
+
+            await shell.openPath(logFilePath);
+            logInfo(`[Main] Opened log file at: ${logFilePath}`);
+        } catch (err) {
+            logError("[Main] Failed to open log file:", err);
+            dialog.showErrorBox("Error", "Unable to open log file. Please check logs folder manually.");
+        }
+    });
+
     /* ---------- IPC: Downloads ---------- */
     ipcMain.on("download:start", async (event, { manifest, options }) => {
+        const logPath = path.join(app.getPath("userData"), "logs", "PixReaper.log");
+        require("./utils/logger").initLogFile(logPath); // <-- initialize first
+
         logInfo(`[Download] Starting download of ${manifest.length} files.`);
         cancelDownload = false;
 
@@ -158,7 +184,6 @@ app.whenReady().then(() => {
                         return;
                     }
 
-                    // ✅ Send progress to mainWindow instead of relying on event.sender
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.webContents.send("download:progress", { index, status, savePath });
                     }
@@ -168,9 +193,7 @@ app.whenReady().then(() => {
                 () => cancelDownload
             );
 
-
             if (!cancelDownload) {
-                // ✅ Build detailed summary
                 const summary = {
                     success: manifest.filter(e => e.status === "success").length,
                     skipped: manifest.filter(e => e.status === "skipped").length,
@@ -184,10 +207,8 @@ app.whenReady().then(() => {
                     `${summary.skipped} skipped, ${summary.failed} failed.`
                 );
 
-                // Notify renderer
                 event.sender.send("download:complete", { summary });
 
-                // ✅ Auto-open download folder if enabled
                 if (userOptions.autoOpenFolder && options.savePath) {
                     try {
                         await shell.openPath(options.savePath);
@@ -204,6 +225,7 @@ app.whenReady().then(() => {
             logError("[Download] Download error:", err);
         }
     });
+
 
 
     ipcMain.on("download:cancel", () => {

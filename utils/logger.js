@@ -1,7 +1,35 @@
 // utils/logger.js
-
+const fs = require("fs");
+const path = require("path");
 const chalk = require?.("chalk") || null; // optional dependency for color output
+
 let DEBUG = false;
+let logFilePath = null;
+let logStream = null;
+
+/**
+ * Initialize or reset the log file (overwrite mode)
+ * Called when a new download starts
+ */
+function initLogFile(filePath) {
+    if (logStream) {
+        try { logStream.end(); } catch { }
+    }
+    logFilePath = filePath;
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    logStream = fs.createWriteStream(filePath, { flags: "w" }); // overwrite mode
+}
+
+/**
+ * Write a line to the log file (if stream active)
+ */
+function writeToFile(level, args) {
+    if (!logStream) return;
+    const timestamp = new Date().toISOString().replace("T", " ").split(".")[0];
+    const line = `[${timestamp}] [${level}] ${args.join(" ")}\n`;
+    try { logStream.write(line); } catch { }
+}
 
 /**
  * Enable or disable debug logging.
@@ -20,16 +48,11 @@ function setDebug(enabled) {
 function colorize(level, text) {
     if (!chalk) return text;
     switch (level) {
-        case "INFO":
-            return chalk.cyan(text);
-        case "DEBUG":
-            return chalk.gray(text);
-        case "WARN":
-            return chalk.yellow(text);
-        case "ERROR":
-            return chalk.red(text);
-        default:
-            return text;
+        case "INFO": return chalk.cyan(text);
+        case "DEBUG": return chalk.gray(text);
+        case "WARN": return chalk.yellow(text);
+        case "ERROR": return chalk.red(text);
+        default: return text;
     }
 }
 
@@ -38,6 +61,7 @@ function colorize(level, text) {
  */
 function logInfo(...args) {
     console.log(colorize("INFO", "[INFO]"), ...args);
+    writeToFile("INFO", args);
 }
 
 /**
@@ -46,6 +70,7 @@ function logInfo(...args) {
 function logDebug(...args) {
     if (!DEBUG) return;
     console.log(colorize("DEBUG", "[DEBUG]"), ...args);
+    writeToFile("DEBUG", args);
 }
 
 /**
@@ -53,6 +78,7 @@ function logDebug(...args) {
  */
 function logWarn(...args) {
     console.warn(colorize("WARN", "[WARN]"), ...args);
+    writeToFile("WARN", args);
 }
 
 /**
@@ -60,6 +86,7 @@ function logWarn(...args) {
  */
 function logError(...args) {
     console.error(colorize("ERROR", "[ERROR]"), ...args);
+    writeToFile("ERROR", args);
 }
 
 /**
@@ -71,4 +98,5 @@ module.exports = {
     logInfo,
     logWarn,
     logError,
+    initLogFile
 };

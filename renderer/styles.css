@@ -186,6 +186,10 @@ body {
     border-left-color: #2196f3;
 }
 
+#results li.skipped {
+    border-left-color: #9e9e9e;
+}
+
 /* Status Icons Content */
 #results li.pending .status-icon::before {
     content: "⏳";
@@ -215,6 +219,11 @@ body {
 #results li.ready .status-icon::before {
     content: "🔗";
     color: #2196f3;
+}
+
+#results li.skipped .status-icon::before {
+    content: "⏭️";
+    color: #9e9e9e;
 }
 
 /* Status Bar */
@@ -301,7 +310,8 @@ body {
     display: flex;
     flex-direction: column;
     border-radius: 10px;
-    overflow: hidden;
+    overflow: visible !important;
+    /* Prevent clipping */
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
@@ -316,6 +326,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    /* Allow wrapping if space tight */
 }
 
 .modal-header h2 {
@@ -325,11 +337,14 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex: 1 1 auto;
 }
 
 .modal-actions.top {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .modal-body {
@@ -415,6 +430,14 @@ button.danger {
 
 button.danger:hover {
     background: #c9302c;
+}
+
+button.info {
+    background: #2196f3;
+}
+
+button.info:hover {
+    background: #1976d2;
 }
 
 /* Checkbox / radio alignment */
@@ -532,13 +555,4 @@ button.danger:hover {
         transform: scale(1);
         opacity: 1;
     }
-}
-
-#results li.skipped {
-    border-left-color: #9e9e9e;
-}
-
-#results li.skipped .status-icon::before {
-    content: "⏭️";
-    color: #9e9e9e;
 }

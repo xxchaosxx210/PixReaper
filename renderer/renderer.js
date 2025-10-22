@@ -313,6 +313,7 @@ const optionsButton = document.getElementById("optionsBtn");
 const cancelOptions = document.getElementById("cancelOptions");
 const saveOptions = document.getElementById("saveOptions");
 const resetOptions = document.getElementById("resetOptions");
+const viewLog = document.getElementById("viewLog");
 const maxConnections = document.getElementById("maxConnections");
 const maxConnectionsValue = document.getElementById("maxConnectionsValue");
 
@@ -356,6 +357,12 @@ resetOptions.addEventListener("click", () => {
     logInfo("[Renderer] Resetting options to defaults...");
     window.electronAPI.send("options:reset");
 });
+
+viewLog.addEventListener("click", () => {
+    logInfo("[Renderer] Opening log file...");
+    window.electronAPI.send("log:open");
+});
+
 
 // --- Helpers ---
 function sanitizeFilename(name) { return name.replace(/[<>:"/\\|?*]+/g, "_"); }
