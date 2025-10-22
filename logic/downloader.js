@@ -141,20 +141,44 @@ async function downloadFile(url, savePath, redirectCount = 0) {
                     fileStream.close();
 
                     try {
+                        const options = loadOptions();
+                        const mode = options.duplicateMode || "skip";
                         const newSize = fs.statSync(tempPath).size;
-                        const existingDuplicate = await findDuplicateInFolder(
-                            folderPath,
-                            totalBytes > 0 ? totalBytes : newSize,
-                            tempPath
-                        );
 
-                        if (existingDuplicate) {
+                        let existingDuplicate = null;
+
+                        // Only check for duplicates if mode !== overwrite
+                        if (mode !== "overwrite") {
+                            existingDuplicate = await findDuplicateInFolder(
+                                folderPath,
+                                totalBytes > 0 ? totalBytes : newSize,
+                                tempPath
+                            );
+                        }
+
+                        if (existingDuplicate && mode === "skip") {
                             fs.unlinkSync(tempPath);
                             return resolve({ status: "skipped", savePath: existingDuplicate });
                         }
 
+                        if (existingDuplicate && mode === "rename") {
+                            const { dir, name, ext } = path.parse(absolutePath);
+                            let counter = 1;
+                            let newPath;
+                            do {
+                                newPath = path.join(dir, `${name}(${counter++})${ext}`);
+                            } while (fs.existsSync(newPath));
+                            fs.renameSync(tempPath, newPath);
+                            return resolve({ status: "renamed", savePath: newPath });
+                        }
+
+                        // Overwrite mode (or no duplicate found)
+                        if (mode === "overwrite" && fs.existsSync(absolutePath)) {
+                            fs.unlinkSync(absolutePath); // remove existing
+                        }
+
                         fs.renameSync(tempPath, absolutePath);
-                        resolve({ status: "success", savePath: absolutePath });
+                        resolve({ status: mode === "overwrite" ? "overwritten" : "success", savePath: absolutePath });
                     } catch (err) {
                         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
                         reject(err);

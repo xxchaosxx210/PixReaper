@@ -337,6 +337,7 @@ saveOptions.addEventListener("click", () => {
         savePath: document.getElementById("savePath").value.trim(),
         createSubfolder: document.getElementById("subfolder").checked,
         indexing: document.querySelector('input[name="indexing"]:checked').value,
+        duplicateMode: document.querySelector('input[name="duplicateMode"]:checked').value,
         maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
         debugLogging: document.getElementById("debugLogging").checked,
         autoOpenFolder: document.getElementById("autoOpenFolder").checked,
@@ -443,14 +444,16 @@ window.electronAPI.receive("download:cancelled", () => {
 
 
 // --- Download Progress ---
-// --- Download Progress ---
 window.electronAPI.receive("download:progress", (data) => {
     const { index, status, savePath } = data;
     const entry = currentManifest.find(e => e.index === index);
     if (entry) entry.status = status;
 
-    // Update progress bar (success only counts toward completion)
-    const completedCount = currentManifest.filter(e => e.status === "success" || e.status === "skipped").length;
+    // Count completed (success + skipped + overwritten + renamed)
+    const completedCount = currentManifest.filter(e =>
+        ["success", "skipped", "overwritten", "renamed"].includes(e.status)
+    ).length;
+
     const percent = ((completedCount / downloadTotal) * 100).toFixed(1);
     statusText.textContent = `Status: Downloading (${completedCount}/${downloadTotal}) — ${percent}%`;
     progressBar.style.width = `${percent}%`;
@@ -464,28 +467,38 @@ window.electronAPI.receive("download:progress", (data) => {
     const link = li.querySelector("a");
     if (!link) return;
 
-    if (status === "success") {
-        link.textContent = savePath;
-        link.href = "file:///" + savePath.replace(/\\/g, "/");
-        link.style.color = "#333";
-    }
-    else if (status === "retrying") {
-        link.textContent = "Retrying download...";
-        link.removeAttribute("href");
-        link.style.color = "orange";
-    }
-    else if (status === "failed") {
-        link.textContent = "Failed: " + entry.url;
-        link.href = entry.url;
-        link.style.color = "red";
-    }
-    else if (status === "cancelled") {
-        link.textContent = "Cancelled: " + entry.url;
-        link.style.color = "gray";
-    }
-    else if (status === "skipped") {
-        link.textContent = "Skipped duplicate file";
-        link.style.color = "#777";
+    switch (status) {
+        case "success":
+            link.textContent = savePath;
+            link.href = "file:///" + savePath.replace(/\\/g, "/");
+            link.style.color = "#333";
+            break;
+        case "retrying":
+            link.textContent = "Retrying download...";
+            link.removeAttribute("href");
+            link.style.color = "orange";
+            break;
+        case "failed":
+            link.textContent = "Failed: " + entry.url;
+            link.href = entry.url;
+            link.style.color = "red";
+            break;
+        case "cancelled":
+            link.textContent = "Cancelled: " + entry.url;
+            link.style.color = "gray";
+            break;
+        case "skipped":
+            link.textContent = "Skipped duplicate file";
+            link.style.color = "#777";
+            break;
+        case "overwritten":
+            link.textContent = "Overwritten existing file";
+            link.style.color = "#0066cc";
+            break;
+        case "renamed":
+            link.textContent = "Renamed duplicate file → " + savePath.split("/").pop();
+            link.style.color = "#009933";
+            break;
     }
 });
 
@@ -518,6 +531,11 @@ window.electronAPI.receive("options:load", (opt) => {
     document.getElementById("savePath").value = opt.savePath ?? "";
     document.getElementById("subfolder").checked = !!opt.createSubfolder;
     document.getElementById("autoOpenFolder").checked = !!opt.autoOpenFolder;
+
+    const dupMode = opt.duplicateMode || "skip";
+    document.querySelectorAll('input[name="duplicateMode"]').forEach(r => {
+        r.checked = r.value === dupMode;
+    });
 
     const indexing = opt.indexing ?? "order";
     document.querySelectorAll('input[name="indexing"]').forEach(r => r.checked = r.value === indexing);

@@ -36,6 +36,7 @@ const DEFAULT_OPTIONS = {
     ],
     lastUrl: "about:blank",
     autoOpenFolder: false,
+    duplicateMode: "skip", // "skip" | "overwrite" | "rename"
     bookmarks: [] // { title, url }
 };
 

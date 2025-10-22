@@ -150,15 +150,24 @@ app.whenReady().then(() => {
                 (index, status, savePath) => {
                     if (cancelDownload) {
                         logInfo("[Download] Download cancelled mid-process.");
-                        event.sender.send("download:complete", {
-                            summary: { cancelled: true }
-                        });
+                        if (mainWindow && !mainWindow.isDestroyed()) {
+                            mainWindow.webContents.send("download:complete", {
+                                summary: { cancelled: true },
+                            });
+                        }
                         return;
                     }
-                    event.sender.send("download:progress", { index, status, savePath });
+
+                    // ✅ Send progress to mainWindow instead of relying on event.sender
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send("download:progress", { index, status, savePath });
+                    }
+
+                    logDebug(`[Main] Progress → ${index}: ${status}`);
                 },
                 () => cancelDownload
             );
+
 
             if (!cancelDownload) {
                 // ✅ Build detailed summary
