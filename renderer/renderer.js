@@ -198,6 +198,7 @@ const statusText = document.getElementById("statusText");
 const imagesFoundText = document.getElementById("imageCount");
 const progressBar = document.getElementById("progressBar");
 const downloadBtn = document.getElementById("downloadBtn");
+const completeSound = document.getElementById("downloadCompleteSound");
 const cancelBtn = document.getElementById("cancelBtn");
 
 let scanInProgress = false;
@@ -338,6 +339,7 @@ saveOptions.addEventListener("click", () => {
         createSubfolder: document.getElementById("subfolder").checked,
         indexing: document.querySelector('input[name="indexing"]:checked').value,
         duplicateMode: document.querySelector('input[name="duplicateMode"]:checked').value,
+        playSoundOnComplete: document.getElementById("playSoundOnComplete").checked,
         maxConnections: parseInt(document.getElementById("maxConnections").value, 10),
         debugLogging: document.getElementById("debugLogging").checked,
         autoOpenFolder: document.getElementById("autoOpenFolder").checked,
@@ -521,6 +523,12 @@ window.electronAPI.receive("download:complete", (data = {}) => {
     }
 
     statusText.textContent = text;
+    // 🔊 Play completion sound if enabled
+    if (optCache?.playSoundOnComplete && completeSound) {
+        completeSound.currentTime = 0;
+        completeSound.play().catch(err => logError("[Renderer] Failed to play sound:", err));
+    }
+
     logInfo("[Renderer] " + text);
 });
 
@@ -563,6 +571,10 @@ window.electronAPI.receive("options:load", (opt) => {
         urlInput.value = "about:blank";
         navigateTo("about:blank");
     }
+
+    // Cache options for use elsewhere (e.g. sound playback)
+    window.optCache = opt;
+
 
 });
 

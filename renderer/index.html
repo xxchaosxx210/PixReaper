@@ -73,6 +73,11 @@
                     Open folder when downloads complete
                 </label>
 
+                <label>
+                    <input type="checkbox" id="playSoundOnComplete" />
+                    Play sound when downloads complete
+                </label>
+
                 <label for="savePath">Save Path</label>
                 <div style="display:flex; gap:6px;">
                     <input type="text" id="savePath" placeholder="e.g. C:\Users\Test\Downloads\PixReaper" />
@@ -128,7 +133,7 @@
             </div>
         </div>
     </div>
-
+    <audio id="downloadCompleteSound" src="../build/complete.mp3" preload="auto"></audio>
     <script src="renderer.js"></script>
 </body>
 

@@ -36,6 +36,7 @@ const DEFAULT_OPTIONS = {
     ],
     lastUrl: "about:blank",
     autoOpenFolder: false,
+    playSoundOnComplete: true,
     duplicateMode: "skip", // "skip" | "overwrite" | "rename"
     bookmarks: [] // { title, url }
 };
@@ -88,8 +89,13 @@ function loadOptions() {
                 title: String(b.title || b.url).trim(),
                 url: String(b.url).trim()
             }));
+
+        // safety options load the defaults instead
         if (typeof merged.autoOpenFolder !== "boolean")
             merged.autoOpenFolder = DEFAULT_OPTIONS.autoOpenFolder;
+
+        if (typeof merged.playSoundOnComplete !== "boolean")
+            merged.playSoundOnComplete = DEFAULT_OPTIONS.playSoundOnComplete;
 
         return merged;
     } catch (err) {
